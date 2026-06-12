@@ -1,0 +1,30 @@
+[
+    {
+        "nome": "teste",
+        "idade": 5.0,
+        "turma": "A1",
+        "observacoes": "te",
+        "pontos_fortes": "te",
+        "dificuldades": "te",
+        "cuidados": "te",
+        "evitar": "te",
+        "estrategias": "te",
+        "medicamentos": "te",
+        "adicionais": "e",
+        "anotacoes": "te"
+    },
+    {
+        "nome": "as",
+        "idade": 2.0,
+        "turma": "5a",
+        "observacoes": "sa",
+        "pontos_fortes": "a",
+        "dificuldades": "a",
+        "cuidados": "",
+        "evitar": "",
+        "estrategias": "",
+        "medicamentos": "",
+        "adicionais": "",
+        "anotacoes": ""
+    }
+]
