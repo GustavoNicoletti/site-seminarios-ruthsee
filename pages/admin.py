@@ -1,122 +1,167 @@
-from nicegui import ui
+from nicegui import ui, app
 from layout import frame
 from database import load_data, save_data
 import datetime
 
 def render():
-    with frame('Administração'):
-        despesas = load_data('despesas.json', [])
+    with frame('Administração do Sistema'):
         comunicados = load_data('comunicados.json', [])
-
-        with ui.row().classes('w-full gap-8 flex-wrap md:flex-nowrap'):
+        despesas = load_data('despesas.json', [])
+        
+        # --- LÓGICA DE COMUNICADOS ---
+        def salvar_comunicado():
+            if not titulo_input.value or not mensagem_input.value:
+                ui.notify('Preencha o título e a mensagem.', type='warning')
+                return
+                
+            novo_aviso = {
+                'titulo': titulo_input.value,
+                'mensagem': mensagem_input.value,
+                'data': datetime.datetime.now().strftime("%d/%m/%Y"),
+                'autor': app.storage.user.get('nome', 'Administração').split(' ')[0]
+            }
             
-            # --- COLUNA 1: COMUNICADOS ---
-            with ui.column().classes('w-full md:w-1/2'):
-                ui.label('Gestão de Comunicados').classes('text-xl font-bold mb-2')
-                
-                with ui.card().classes('w-full p-6 rounded-2xl shadow-sm mb-4'):
-                    titulo_input = ui.input('Título do Comunicado').classes('w-full mb-2')
-                    msg_input = ui.textarea('Mensagem').classes('w-full mb-4')
-                    
-                    def salvar_comunicado():
-                        if not titulo_input.value or not msg_input.value:
-                            ui.notify('Preencha título e mensagem.', type='warning')
-                            return
-                        
-                        comunicados.insert(0, {
-                            'titulo': titulo_input.value,
-                            'mensagem': msg_input.value,
-                            'data': datetime.datetime.now().strftime("%d/%m/%Y")
-                        })
-                        save_data('comunicados.json', comunicados)
-                        
-                        titulo_input.value = ''
-                        msg_input.value = ''
-                        ui.notify('Comunicado publicado!', type='positive')
-                        atualizar_comunicados()
-                        
-                    ui.button('Publicar Comunicado', icon='campaign', on_click=salvar_comunicado).props('unelevated color=primary rounded-xl w-full')
+            comunicados.append(novo_aviso)
+            save_data('comunicados.json', comunicados)
+            ui.notify('Comunicado publicado com sucesso!', type='positive')
+            
+            titulo_input.value = ''
+            mensagem_input.value = ''
+            atualizar_lista_comunicados()
 
-                lista_comunicados = ui.column().classes('w-full gap-3')
+        def confirmar_exclusao_comunicado(aviso):
+            with ui.dialog() as confirm_dialog, ui.card().classes('p-6 rounded-2xl'):
+                ui.label('Confirmar Exclusão').classes('text-xl font-bold text-red-600 mb-4')
+                ui.label(f'Tem certeza que deseja apagar o comunicado "{aviso["titulo"]}"?')
+                with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                    ui.button('Cancelar', on_click=confirm_dialog.close).props('flat')
+                    ui.button('Apagar', on_click=lambda: apagar_comunicado(aviso, confirm_dialog)).props('unelevated color=red rounded')
+            confirm_dialog.open()
+
+        def apagar_comunicado(aviso, confirm_dialog):
+            comunicados.remove(aviso)
+            save_data('comunicados.json', comunicados)
+            ui.notify('Comunicado removido.', type='warning')
+            confirm_dialog.close()
+            atualizar_lista_comunicados()
+
+        # --- LÓGICA DE DESPESAS ---
+        def salvar_despesa():
+            if not desc_despesa_input.value or not valor_despesa_input.value:
+                ui.notify('Preencha a descrição e o valor.', type='warning')
+                return
+            
+            try:
+                valor_float = float(str(valor_despesa_input.value).replace(',', '.'))
+            except ValueError:
+                ui.notify('Digite um valor numérico válido.', type='warning')
+                return
                 
-                def atualizar_comunicados():
-                    lista_comunicados.clear()
-                    with lista_comunicados:
+            nova_despesa = {
+                'descricao': desc_despesa_input.value,
+                'valor': valor_float,
+                'data': datetime.datetime.now().strftime("%d/%m/%Y"),
+                'autor': app.storage.user.get('nome', 'Administração').split(' ')[0]
+            }
+            
+            despesas.append(nova_despesa)
+            save_data('despesas.json', despesas)
+            ui.notify('Despesa registrada com sucesso!', type='positive')
+            
+            desc_despesa_input.value = ''
+            valor_despesa_input.value = ''
+            atualizar_lista_despesas()
+
+        def confirmar_exclusao_despesa(despesa):
+            with ui.dialog() as confirm_dialog, ui.card().classes('p-6 rounded-2xl'):
+                ui.label('Confirmar Exclusão').classes('text-xl font-bold text-red-600 mb-4')
+                ui.label(f'Tem certeza que deseja apagar a despesa "{despesa["descricao"]}"?')
+                with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                    ui.button('Cancelar', on_click=confirm_dialog.close).props('flat')
+                    ui.button('Apagar', on_click=lambda: apagar_despesa(despesa, confirm_dialog)).props('unelevated color=red rounded')
+            confirm_dialog.open()
+
+        def apagar_despesa(despesa, confirm_dialog):
+            despesas.remove(despesa)
+            save_data('despesas.json', despesas)
+            ui.notify('Despesa removida.', type='warning')
+            confirm_dialog.close()
+            atualizar_lista_despesas()
+
+        # --- INTERFACE COM TABS ---
+        with ui.tabs().classes('w-full mb-6') as tabs:
+            tab_comunicados = ui.tab('Comunicados', icon='campaign')
+            tab_despesas = ui.tab('Despesas', icon='account_balance_wallet')
+
+        with ui.tab_panels(tabs, value=tab_comunicados).classes('w-full bg-transparent p-0'):
+            
+            # PAINEL DE COMUNICADOS
+            with ui.tab_panel(tab_comunicados):
+                with ui.card().classes('w-full p-6 rounded-2xl shadow-sm mb-8 border border-gray-100 dark:border-gray-800'):
+                    with ui.row().classes('items-center gap-2 mb-4'):
+                        ui.icon('campaign', size='sm').classes('text-primary')
+                        ui.label('Publicar Novo Comunicado').classes('text-xl font-bold text-gray-800 dark:text-gray-100')
+                    
+                    titulo_input = ui.input('Título do Comunicado *').classes('w-full mb-4')
+                    mensagem_input = ui.textarea('Mensagem *').classes('w-full mb-4')
+                    
+                    with ui.row().classes('w-full justify-end'):
+                        ui.button('Publicar no Dashboard', icon='send', on_click=salvar_comunicado).props('unelevated color=primary rounded-xl px-6')
+
+                ui.label('Comunicados Ativos').classes('text-xl font-bold mb-4 text-gray-800 dark:text-gray-100')
+                container_comunicados = ui.column().classes('w-full gap-4')
+
+                def atualizar_lista_comunicados():
+                    container_comunicados.clear()
+                    with container_comunicados:
                         if not comunicados:
-                            ui.label('Nenhum comunicado registrado.').classes('text-gray-400 italic')
-                        for c in comunicados:
-                            with ui.card().classes('w-full p-4 rounded-xl bg-blue-50 dark:bg-slate-800'):
+                            ui.label('Nenhum comunicado publicado.').classes('text-gray-500 italic')
+                        
+                        for c in reversed(comunicados):
+                            with ui.card().classes('w-full p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800'):
                                 with ui.row().classes('w-full justify-between items-start'):
-                                    with ui.column().classes('gap-0'):
-                                        ui.label(c['titulo']).classes('font-bold text-blue-800 dark:text-blue-300')
-                                        ui.label(c['data']).classes('text-xs text-gray-500')
-                                    ui.button(icon='delete', on_click=lambda c=c: apagar_comunicado(c)).props('flat color=red size=sm round padding=xs')
-                                ui.label(c['mensagem']).classes('text-sm text-gray-700 dark:text-gray-300 mt-2')
+                                    with ui.column().classes('gap-1 flex-1'):
+                                        ui.label(c.get('titulo', '')).classes('font-bold text-lg text-gray-800 dark:text-gray-100')
+                                        ui.label(f"Publicado em {c.get('data', '')} por {c.get('autor', '')}").classes('text-xs text-gray-500')
+                                    
+                                    ui.button(icon='delete', on_click=lambda c=c: confirmar_exclusao_comunicado(c)).props('flat color=red round size=sm').tooltip('Remover Comunicado')
                                 
-                def apagar_comunicado(c):
-                    comunicados.remove(c)
-                    save_data('comunicados.json', comunicados)
-                    ui.notify('Comunicado removido.', type='warning')
-                    atualizar_comunicados()
-                    
-                atualizar_comunicados()
+                                ui.label(c.get('mensagem', '')).classes('text-gray-700 dark:text-gray-300 mt-3 text-sm')
 
-            # --- COLUNA 2: DESPESAS E BACKUP ---
-            with ui.column().classes('w-full md:w-1/2'):
-                ui.label('Gestão Financeira').classes('text-xl font-bold mb-2')
-                
-                with ui.card().classes('w-full p-6 rounded-2xl shadow-sm mb-4'):
-                    desc_input = ui.input('Descrição da Despesa').classes('w-full mb-2')
-                    valor_input = ui.number('Valor (R$)', format='%.2f').classes('w-full mb-4')
-                    
-                    def salvar_despesa():
-                        if not desc_input.value or valor_input.value is None:
-                            ui.notify('Preencha descrição e valor.', type='warning')
-                            return
-                        
-                        despesas.insert(0, {
-                            'descricao': desc_input.value,
-                            'valor': float(valor_input.value),
-                            'data': datetime.datetime.now().strftime("%d/%m/%Y")
-                        })
-                        save_data('despesas.json', despesas)
-                        
-                        desc_input.value = ''
-                        valor_input.value = None
-                        ui.notify('Despesa registrada!', type='positive')
-                        atualizar_despesas()
-                        
-                    ui.button('Registrar Despesa', icon='add_shopping_cart', on_click=salvar_despesa).props('unelevated color=secondary rounded-xl w-full')
+                atualizar_lista_comunicados()
 
-                lista_despesas = ui.column().classes('w-full gap-3 mb-6')
-                
-                def atualizar_despesas():
-                    lista_despesas.clear()
-                    with lista_despesas:
+            # PAINEL DE DESPESAS
+            with ui.tab_panel(tab_despesas):
+                with ui.card().classes('w-full p-6 rounded-2xl shadow-sm mb-8 border border-gray-100 dark:border-gray-800'):
+                    with ui.row().classes('items-center gap-2 mb-4'):
+                        ui.icon('account_balance_wallet', size='sm').classes('text-emerald-500')
+                        ui.label('Registrar Nova Despesa').classes('text-xl font-bold text-gray-800 dark:text-gray-100')
+                    
+                    with ui.row().classes('w-full gap-4 mb-4'):
+                        desc_despesa_input = ui.input('Descrição da Despesa *').classes('flex-1')
+                        valor_despesa_input = ui.input('Valor (R$) *').props('type=number step=0.01').classes('w-1/3')
+                    
+                    with ui.row().classes('w-full justify-end'):
+                        ui.button('Registrar Despesa', icon='add_circle', on_click=salvar_despesa).props('unelevated color=positive rounded-xl px-6')
+
+                ui.label('Histórico de Despesas').classes('text-xl font-bold mb-4 text-gray-800 dark:text-gray-100')
+                container_despesas = ui.column().classes('w-full gap-4')
+
+                def atualizar_lista_despesas():
+                    container_despesas.clear()
+                    with container_despesas:
                         if not despesas:
-                            ui.label('Nenhuma despesa registrada.').classes('text-gray-400 italic')
-                        for d in despesas:
-                            with ui.card().classes('w-full p-4 rounded-xl border-l-4 border-secondary'):
-                                with ui.row().classes('w-full justify-between items-center'):
-                                    with ui.column().classes('gap-0'):
-                                        ui.label(d['descricao']).classes('font-bold text-gray-800 dark:text-gray-100')
-                                        ui.label(d['data']).classes('text-xs text-gray-500')
-                                    with ui.row().classes('items-center gap-3'):
-                                        ui.label(f"R$ {d['valor']:.2f}").classes('font-bold text-secondary text-lg')
-                                        ui.button(icon='delete', on_click=lambda d=d: apagar_despesa(d)).props('flat color=red size=sm round padding=xs')
-                                        
-                def apagar_despesa(d):
-                    despesas.remove(d)
-                    save_data('despesas.json', despesas)
-                    ui.notify('Despesa removida.', type='warning')
-                    atualizar_despesas()
-                    
-                atualizar_despesas()
-                
-                ui.label('Sistema').classes('text-xl font-bold mb-2 mt-2')
-                with ui.card().classes('w-full p-6 rounded-2xl shadow-sm'):
-                    ui.label('Backup de Dados').classes('font-bold mb-1')
-                    ui.label('Baixe os arquivos para manter uma cópia de segurança.').classes('text-sm text-gray-500 mb-4')
-                    with ui.row().classes('gap-2 w-full'):
-                        ui.button('Alunos', icon='download', on_click=lambda: ui.download('data/alunos.json')).props('outline rounded-xl size=sm flex-1')
-                        ui.button('Estratégias', icon='download', on_click=lambda: ui.download('data/estrategias.json')).props('outline rounded-xl size=sm flex-1')
+                            ui.label('Nenhuma despesa registrada.').classes('text-gray-500 italic')
+                        
+                        for d in reversed(despesas):
+                            with ui.card().classes('w-full p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex-row justify-between items-center'):
+                                with ui.column().classes('gap-0'):
+                                    ui.label(d.get('descricao', '')).classes('font-bold text-lg text-gray-800 dark:text-gray-100')
+                                    ui.label(f"Registrado em {d.get('data', '')} por {d.get('autor', '')}").classes('text-xs text-gray-500')
+                                
+                                with ui.row().classes('items-center gap-4'):
+                                    valor_formatado = f"R$ {float(d.get('valor', 0)):.2f}".replace('.', ',')
+                                    ui.label(valor_formatado).classes('text-xl font-black text-emerald-600 dark:text-emerald-400')
+                                    ui.button(icon='delete', on_click=lambda d=d: confirmar_exclusao_despesa(d)).props('flat color=red round size=sm').tooltip('Remover Despesa')
+
+                atualizar_lista_despesas()

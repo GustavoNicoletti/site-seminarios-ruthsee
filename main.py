@@ -1,26 +1,33 @@
 from nicegui import ui
-from pages import dashboard, alunos, estrategias, admin, config
+from pages import login, dashboard, alunos, estrategias, usuarios, admin, config
 
-# Registro das rotas (Páginas)
+@ui.page('/login')
+def login_page():
+    login.render()
+
 @ui.page('/')
-def page_dashboard():
+def dashboard_page():
     dashboard.render()
 
 @ui.page('/alunos')
-def page_alunos():
+def alunos_page():
     alunos.render()
 
 @ui.page('/estrategias')
-def page_estrategias():
+def estrategias_page():
     estrategias.render()
 
+@ui.page('/usuarios')
+def usuarios_page():
+    usuarios.render()
+
 @ui.page('/admin')
-def page_admin():
+def admin_page():
     admin.render()
 
 @ui.page('/config')
-def page_config():
+def config_page():
     config.render()
 
-# Inicialização do Servidor
-ui.run(title='AdaptaEscola', favicon='🧩', language='pt-BR')
+if __name__ in {'__main__', '__mp_main__'}:
+    ui.run(title='AdaptaEscola', port=8080, storage_secret='adapta_escola_secreto_123')

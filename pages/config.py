@@ -4,44 +4,35 @@ from database import load_data, save_data
 
 def render():
     with frame('Configurações'):
-        config_data = load_data('config.json', {
-            'nome': 'Professor(a)',
-            'email': 'prof@adaptaescola.com',
-            'foto': '',
-            'modo_escuro': False
-        })
-
-        def salvar_configuracoes():
-            config_data['nome'] = nome_input.value
-            config_data['email'] = email_input.value
-            config_data['foto'] = foto_input.value
-            config_data['modo_escuro'] = escuro_switch.value
-            
-            save_data('config.json', config_data)
-            ui.notify('Configurações salvas com sucesso!', type='positive')
-            ui.timer(1.0, lambda: ui.run_javascript('window.location.reload()'), once=True)
-
-        with ui.column().classes('w-full items-center p-4'):
-            with ui.card().classes('w-full max-w-2xl p-8 rounded-2xl shadow-lg'):
-                ui.label('Configurações do Perfil').classes('text-2xl font-bold mb-6')
+        # Adicionamos 'cargo' e 'bio' nos dados padrão
+        config = load_data('config.json', {'nome': 'Professor(a)', 'foto': '', 'cargo': 'Professor', 'bio': ''})
+        
+        with ui.column().classes('w-full max-w-2xl mx-auto'):
+            # --- CARD DE PERFIL ---
+            with ui.card().classes('w-full p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800'):
+                ui.label('Perfil do Usuário').classes('text-xl font-bold dark:text-gray-100 mb-6')
                 
-                with ui.row().classes('w-full gap-6 mb-6 items-center'):
-                    foto_url = config_data.get('foto', '').strip()
+                with ui.row().classes('items-center gap-6 mb-8'):
+                    foto_url = config.get('foto', '').strip()
                     if foto_url:
-                        ui.image(foto_url).classes('w-24 h-24 rounded-full object-cover border-2 border-gray-200')
+                        ui.image(foto_url).classes('w-24 h-24 rounded-full object-cover border-4 border-primary/20')
                     else:
-                        initial = config_data.get('nome', 'P')[0].upper() if config_data.get('nome') else 'P'
-                        ui.label(initial).classes('w-24 h-24 rounded-full bg-blue-500 text-white flex items-center justify-center text-4xl font-bold')
-                    
-                    with ui.column().classes('flex-grow gap-2'):
-                        nome_input = ui.input('Nome Completo', value=config_data.get('nome')).classes('w-full')
-                        foto_input = ui.input('URL da Foto (Opcional)', value=config_data.get('foto')).classes('w-full')
+                        primeira_letra = config.get('nome', 'P')[0].upper() if config.get('nome') else 'P'
+                        ui.label(primeira_letra).classes('w-24 h-24 rounded-full bg-primary text-white flex items-center justify-center text-4xl font-bold shadow-sm')
                 
-                email_input = ui.input('E-mail', value=config_data.get('email')).classes('w-full mb-6')
+                # Nome e Cargo lado a lado em telas maiores
+                with ui.row().classes('w-full gap-4 mb-4'):
+                    nome_input = ui.input('Nome de Exibição').classes('flex-1').bind_value(config, 'nome')
+                    cargo_input = ui.input('Cargo / Função').classes('flex-1').bind_value(config, 'cargo')
                 
-                ui.separator().classes('my-4')
+                foto_input = ui.input('URL da Foto (opcional)').classes('w-full mb-4').bind_value(config, 'foto')
                 
-                ui.label('Preferências').classes('text-lg font-semibold mb-4')
-                escuro_switch = ui.switch('Ativar Modo Escuro', value=config_data.get('modo_escuro')).classes('mb-6')
+                # Novo campo de Notas/Bio
+                bio_input = ui.textarea('Notas / Biografia').classes('w-full mb-6').bind_value(config, 'bio')
                 
-                ui.button('Salvar Alterações', icon='save', on_click=salvar_configuracoes).props('unelevated color=primary size=lg').classes('w-full')
+                def salvar_perfil():
+                    save_data('config.json', config)
+                    ui.notify('Perfil salvo com sucesso! Recarregue a página para ver as alterações.', type='positive')
+                
+                with ui.row().classes('w-full justify-end'):
+                    ui.button('Salvar Perfil', on_click=salvar_perfil).props('unelevated color=primary rounded-xl px-8 py-2 font-bold')

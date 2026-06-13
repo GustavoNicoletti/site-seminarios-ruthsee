@@ -1,0 +1,9 @@
+[
+    {
+        "nome": "teste",
+        "email": "teste",
+        "senha": "teste",
+        "cargo": "Professor",
+        "data_criacao": "12/06/2026"
+    }
+]

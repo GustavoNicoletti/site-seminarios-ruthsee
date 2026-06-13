@@ -1,12 +1,15 @@
 [
     {
-        "titulo": "Antecipação de Rotina",
-        "categoria": "Rotina",
-        "desc": "Utilizar painéis visuais para mostrar a sequência de atividades do dia."
-    },
-    {
         "titulo": "Pausa Sensorial",
         "categoria": "Sensibilidade",
         "desc": "Permitir 5 minutos no cantinho do silêncio ao notar sinais de sobrecarga."
+    },
+    {
+        "titulo": "aaa",
+        "categoria": "Interação social",
+        "conteudo": "aaa",
+        "quando_usar": "a",
+        "quando_evitar": "a",
+        "observacoes": "a"
     }
 ]
