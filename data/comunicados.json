@@ -1,13 +1,8 @@
 [
     {
-        "titulo": "teste",
-        "mensagem": "teste",
-        "data": "12/06/2026"
-    },
-    {
-        "titulo": "teste",
-        "mensagem": "teste",
-        "data": "12/06/2026",
+        "titulo": "festa junina",
+        "mensagem": "amanha terá festa junina as 10:30",
+        "data": "13/06/2026",
         "autor": "Administrador"
     }
 ]

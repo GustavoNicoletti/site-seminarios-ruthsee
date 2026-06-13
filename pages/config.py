@@ -1,38 +1,45 @@
 from nicegui import ui
-from layout import frame
+
 from database import load_data, save_data
+from layout import frame
+
 
 def render():
     with frame('Configurações'):
-        # Adicionamos 'cargo' e 'bio' nos dados padrão
         config = load_data('config.json', {'nome': 'Professor(a)', 'foto': '', 'cargo': 'Professor', 'bio': ''})
-        
-        with ui.column().classes('w-full max-w-2xl mx-auto'):
-            # --- CARD DE PERFIL ---
-            with ui.card().classes('w-full p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800'):
-                ui.label('Perfil do Usuário').classes('text-xl font-bold dark:text-gray-100 mb-6')
-                
-                with ui.row().classes('items-center gap-6 mb-8'):
+
+        with ui.column().classes('w-full max-w-4xl mx-auto gap-5'):
+            with ui.row().classes('app-card-colorful w-full items-center justify-between gap-5 p-6'):
+                with ui.column().classes('gap-2'):
+                    ui.label('⚙️ Meu cantinho').classes('app-muted text-sm font-black uppercase')
+                    ui.label('Perfil da equipe').classes('text-3xl font-black')
+                    ui.label('Personalize como seu nome aparece no sistema.').classes('app-muted text-sm')
+                ui.label('😊').classes('text-5xl')
+
+            with ui.card().classes('app-card w-full p-6'):
+                with ui.row().classes('items-center gap-5 mb-6'):
                     foto_url = config.get('foto', '').strip()
                     if foto_url:
-                        ui.image(foto_url).classes('w-24 h-24 rounded-full object-cover border-4 border-primary/20')
+                        ui.image(foto_url).classes('w-24 h-24 rounded-full object-cover')
                     else:
                         primeira_letra = config.get('nome', 'P')[0].upper() if config.get('nome') else 'P'
-                        ui.label(primeira_letra).classes('w-24 h-24 rounded-full bg-primary text-white flex items-center justify-center text-4xl font-bold shadow-sm')
-                
-                # Nome e Cargo lado a lado em telas maiores
-                with ui.row().classes('w-full gap-4 mb-4'):
-                    nome_input = ui.input('Nome de Exibição').classes('flex-1').bind_value(config, 'nome')
-                    cargo_input = ui.input('Cargo / Função').classes('flex-1').bind_value(config, 'cargo')
-                
-                foto_input = ui.input('URL da Foto (opcional)').classes('w-full mb-4').bind_value(config, 'foto')
-                
-                # Novo campo de Notas/Bio
-                bio_input = ui.textarea('Notas / Biografia').classes('w-full mb-6').bind_value(config, 'bio')
-                
+                        ui.label(primeira_letra).classes('brand-badge w-24 h-24 flex items-center justify-center text-4xl font-black')
+
+                    with ui.column().classes('gap-1'):
+                        ui.label(config.get('nome', 'Professor(a)')).classes('text-2xl font-black')
+                        ui.label(config.get('cargo', 'Professor')).classes('app-pill text-sm font-black px-3 py-1 w-fit')
+                        ui.label('Essas informações ajudam a deixar o sistema mais pessoal. 🌻').classes('app-muted text-sm')
+
+                with ui.grid(columns=2).classes('w-full gap-4'):
+                    ui.input('Nome de exibição').props('outlined').classes('w-full').bind_value(config, 'nome')
+                    ui.input('Cargo / função').props('outlined').classes('w-full').bind_value(config, 'cargo')
+
+                ui.input('URL da foto (opcional)').props('outlined').classes('w-full mt-4').bind_value(config, 'foto')
+                ui.textarea('Notas / biografia').props('outlined autogrow').classes('w-full mt-4').bind_value(config, 'bio')
+
                 def salvar_perfil():
                     save_data('config.json', config)
-                    ui.notify('Perfil salvo com sucesso! Recarregue a página para ver as alterações.', type='positive')
-                
-                with ui.row().classes('w-full justify-end'):
-                    ui.button('Salvar Perfil', on_click=salvar_perfil).props('unelevated color=primary rounded-xl px-8 py-2 font-bold')
+                    ui.notify('Perfil salvo com sucesso! ⭐', type='positive')
+
+                with ui.row().classes('w-full justify-end mt-6'):
+                    ui.button('Salvar perfil ✨', icon='save', on_click=salvar_perfil).props('unelevated color=primary')

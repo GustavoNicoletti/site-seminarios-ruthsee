@@ -2,5 +2,7 @@
     "nome": "Professor(a)",
     "email": "teste2",
     "foto": "https://static.vecteezy.com/ti/vetor-gratis/p1/35354098-do-fofa-crianca-estudando-vetor.jpg",
-    "modo_escuro": true
+    "modo_escuro": true,
+    "cargo": "admin",
+    "bio": ""
 }
