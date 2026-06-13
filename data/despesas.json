@@ -4,11 +4,5 @@
         "valor": 123.0,
         "data": "12/06/2026",
         "autor": "Administrador"
-    },
-    {
-        "descricao": "teste3",
-        "valor": 111.0,
-        "data": "12/06/2026",
-        "autor": "Administrador"
     }
 ]

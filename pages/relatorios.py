@@ -26,7 +26,9 @@ def _csv_download(nome_arquivo, cabecalhos, linhas):
 
 def render():
     with frame('Relatórios'):
+        agenda = load_data('agenda.json', [])
         alunos = load_data('alunos.json', [])
+        turmas = load_data('turmas.json', [])
         responsaveis = load_data('pais.json', [])
         registros = load_data('registros.json', [])
         estrategias = load_data('estrategias.json', [])
@@ -40,6 +42,10 @@ def render():
             aluno for aluno in alunos
             if aluno.get('diagnostico') or aluno.get('necessidades')
         ]
+        total_turmas = len({
+            *(turma.get('nome', '').strip() for turma in turmas if turma.get('nome', '').strip()),
+            *(aluno.get('turma', '').strip() for aluno in alunos if aluno.get('turma', '').strip()),
+        })
 
         ui.add_css('''
             .report-row {
@@ -123,6 +129,8 @@ def render():
                     with ui.column().classes('w-full gap-2'):
                         dados_resumo = [
                             ('Alunos cadastrados', len(alunos)),
+                            ('Atividades na agenda', len(agenda)),
+                            ('Turmas acompanhadas', total_turmas),
                             ('Alunos com atenção registrada', len(alunos_com_atencao)),
                             ('Responsáveis cadastrados', len(responsaveis)),
                             ('Registros de acompanhamento', len(registros)),
@@ -139,6 +147,7 @@ def render():
                         ui.button('Baixar alunos CSV', icon='download', on_click=baixar_alunos).classes('w-full justify-start').props('flat color=primary no-caps')
                         ui.button('Baixar responsáveis CSV', icon='download', on_click=baixar_responsaveis).classes('w-full justify-start').props('flat color=secondary no-caps')
                         ui.button('Baixar registros CSV', icon='download', on_click=baixar_registros).classes('w-full justify-start').props('flat color=primary no-caps')
+                        ui.button('Gerar ficha PDF', icon='print', on_click=lambda: ui.navigate.to('/impressao')).classes('w-full justify-start').props('flat color=secondary no-caps')
 
             with ui.grid(columns=1).classes('w-full gap-5 lg:grid-cols-2'):
                 with ui.card().classes('app-card w-full p-5'):

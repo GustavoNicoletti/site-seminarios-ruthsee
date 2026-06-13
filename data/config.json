@@ -4,5 +4,10 @@
     "foto": "https://static.vecteezy.com/ti/vetor-gratis/p1/35354098-do-fofa-crianca-estudando-vetor.jpg",
     "modo_escuro": true,
     "cargo": "admin",
-    "bio": ""
+    "bio": "",
+    "preferencias": {
+        "modo_escuro": true,
+        "pagina_inicial": "/alunos",
+        "nome_completo_topo": true
+    }
 }

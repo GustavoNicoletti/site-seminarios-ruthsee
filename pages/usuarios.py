@@ -30,28 +30,46 @@ def render():
             editing_index['value'] = index
             if user:
                 nome_input.value = user.get('nome', '')
+                usuario_input.value = user.get('usuario') or user.get('email', '')
                 email_input.value = user.get('email', '')
                 senha_input.value = user.get('senha', '')
                 cargo_input.value = user.get('cargo', 'Professor')
+                foto_input.value = user.get('foto', '')
                 dialog_title.set_text('Editar usuário 👥')
             else:
                 nome_input.value = ''
+                usuario_input.value = ''
                 email_input.value = ''
                 senha_input.value = ''
                 cargo_input.value = 'Professor'
+                foto_input.value = ''
                 dialog_title.set_text('Novo usuário ✨')
             dialog.open()
 
         def salvar_usuario():
-            if not nome_input.value or not email_input.value or not senha_input.value:
-                ui.notify('Preencha nome, e-mail e senha. 😊', type='warning')
+            if not nome_input.value or not usuario_input.value or not senha_input.value:
+                ui.notify('Preencha nome, usuário e senha. 😊', type='warning')
+                return
+
+            usuario_acesso = usuario_input.value.strip()
+            usuario_normalizado = usuario_acesso.lower()
+            duplicado = any(
+                i != editing_index['value']
+                and (u.get('usuario') or u.get('email', '')).strip().lower() == usuario_normalizado
+                for i, u in enumerate(usuarios)
+            )
+            if duplicado:
+                ui.notify('Já existe um funcionário com este usuário de acesso.', type='warning')
                 return
 
             dados = {
                 'nome': nome_input.value.strip(),
-                'email': email_input.value.strip(),
+                'usuario': usuario_acesso,
+                'email': (email_input.value or '').strip(),
                 'senha': senha_input.value,
                 'cargo': cargo_input.value,
+                'foto': (foto_input.value or '').strip(),
+                'preferencias': usuarios[editing_index['value']].get('preferencias', {}) if editing_index['value'] >= 0 else {},
                 'data_criacao': datetime.datetime.now().strftime('%d/%m/%Y'),
             }
 
@@ -86,9 +104,11 @@ def render():
         with ui.dialog() as dialog, ui.card().classes('app-card w-full max-w-md p-6'):
             dialog_title = ui.label('Novo usuário ✨').classes('text-2xl font-black mb-4')
             nome_input = ui.input('Nome completo *').props('outlined').classes('w-full mb-3')
-            email_input = ui.input('E-mail *').props('outlined').classes('w-full mb-3')
+            usuario_input = ui.input('Usuário de acesso *').props('outlined').classes('w-full mb-3')
+            email_input = ui.input('E-mail institucional (opcional)').props('outlined').classes('w-full mb-3')
             senha_input = ui.input('Senha *', password=True, password_toggle_button=True).props('outlined').classes('w-full mb-3')
             cargo_input = ui.select(cargos, label='Cargo *').props('outlined').classes('w-full mb-4')
+            foto_input = ui.input('URL da foto (opcional)').props('outlined').classes('w-full mb-4')
             with ui.row().classes('w-full justify-end gap-2 mt-4'):
                 ui.button('Cancelar', on_click=dialog.close).props('flat')
                 ui.button('Salvar ✨', icon='check', on_click=salvar_usuario).props('unelevated color=primary')
@@ -118,6 +138,7 @@ def render():
                 if (cargo_selecionado == 'Todos' or usuario.get('cargo') == cargo_selecionado)
                 and (not termo or termo in ' '.join([
                     usuario.get('nome', ''),
+                    usuario.get('usuario', ''),
                     usuario.get('email', ''),
                     usuario.get('cargo', ''),
                 ]).lower())
@@ -136,13 +157,21 @@ def render():
                     cargo = usuario.get('cargo', 'Professor')
                     emoji = {'Administrador': '🛡️', 'Coordenador': '🧭', 'Professor': '🍎', 'Assistente': '🤝'}.get(cargo, '👤')
                     primeira_letra = usuario.get('nome', 'U')[0].upper()
+                    foto_url = usuario.get('foto', '').strip()
 
                     with ui.card().classes('app-card w-full p-4 flex-row items-center justify-between'):
                         with ui.row().classes('items-center gap-4 min-w-0'):
-                            ui.avatar(primeira_letra).classes('brand-badge text-white font-black w-12 h-12')
+                            if foto_url:
+                                ui.image(foto_url).classes('w-12 h-12 rounded-lg object-cover')
+                            else:
+                                ui.avatar(primeira_letra).classes('brand-badge text-white font-black w-12 h-12')
                             with ui.column().classes('gap-0 min-w-0'):
                                 ui.label(usuario.get('nome', 'Sem nome')).classes('font-black text-lg line-clamp-1')
-                                ui.label(usuario.get('email', '')).classes('app-muted text-sm line-clamp-1')
+                                usuario_acesso = usuario.get('usuario') or usuario.get('email', 'sem-usuario')
+                                email_info = usuario.get('email', '')
+                                ui.label(f'Usuário: {usuario_acesso}').classes('app-muted text-sm line-clamp-1')
+                                if email_info:
+                                    ui.label(email_info).classes('app-muted text-xs line-clamp-1')
 
                         with ui.row().classes('items-center gap-3'):
                             ui.label(f'{emoji} {cargo}').classes('app-pill text-xs font-black px-3 py-1 hidden sm:block')

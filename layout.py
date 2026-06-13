@@ -6,13 +6,58 @@ from database import load_data, save_data
 from theme import add_app_theme
 
 
+def _login_usuario(user):
+    return str(user.get('usuario') or user.get('email') or '').strip().lower()
+
+
+def _preferencias_usuario(user, config):
+    preferencias = user.get('preferencias') if user else {}
+    if not isinstance(preferencias, dict):
+        preferencias = {}
+    return {
+        'modo_escuro': preferencias.get('modo_escuro', config.get('modo_escuro', False)),
+        'pagina_inicial': preferencias.get('pagina_inicial', '/'),
+        'nome_completo_topo': preferencias.get('nome_completo_topo', False),
+    }
+
+
+def _salvar_preferencias_usuario(user, config, preferencias):
+    user['preferencias'] = preferencias
+
+    if user.get('tipo') == 'admin_padrao':
+        config['modo_escuro'] = bool(preferencias.get('modo_escuro'))
+        config['preferencias'] = {
+            **(config.get('preferencias', {}) if isinstance(config.get('preferencias'), dict) else {}),
+            **preferencias,
+        }
+        save_data('config.json', config)
+        return
+
+    usuarios = load_data('usuarios.json', [])
+    login_atual = _login_usuario(user)
+    for index, usuario in enumerate(usuarios):
+        if _login_usuario(usuario) == login_atual:
+            usuario['preferencias'] = preferencias
+            usuarios[index] = usuario
+            save_data('usuarios.json', usuarios)
+            return
+
+    config['modo_escuro'] = bool(preferencias.get('modo_escuro'))
+    config['preferencias'] = {
+        **(config.get('preferencias', {}) if isinstance(config.get('preferencias'), dict) else {}),
+        **preferencias,
+    }
+    save_data('config.json', config)
+
+
 @contextmanager
 def frame(nav_title: str):
     config = load_data('config.json', {'modo_escuro': False})
     add_app_theme()
-    dark = ui.dark_mode(config.get('modo_escuro'))
-
     user = app.storage.user
+    preferencias = _preferencias_usuario(user, config)
+    dark = ui.dark_mode(preferencias.get('modo_escuro'))
+
     if not user.get('nome'):
         ui.navigate.to('/login')
         with ui.column().classes('hidden'):
@@ -22,15 +67,17 @@ def frame(nav_title: str):
     nome_usuario = user.get('nome', 'Usuário')
     cargo_usuario = user.get('cargo', 'Professor')
     foto_usuario = user.get('foto', '').strip()
+    nome_topo = nome_usuario if preferencias.get('nome_completo_topo') else nome_usuario.split(' ')[0]
 
     def toggle_theme():
-        if dark.value:
+        novo_modo = not dark.value
+        if not novo_modo:
             dark.disable()
-            config['modo_escuro'] = False
         else:
             dark.enable()
-            config['modo_escuro'] = True
-        save_data('config.json', config)
+        preferencias['modo_escuro'] = novo_modo
+        _salvar_preferencias_usuario(user, config, preferencias)
+        theme_button.props(f'icon={"light_mode" if novo_modo else "dark_mode"}')
 
     def fazer_logout():
         app.storage.user.clear()
@@ -38,11 +85,14 @@ def frame(nav_title: str):
 
     page_emojis = {
         'Dashboard': '🏫',
+        'Agenda / Rotina do Dia': '🗓️',
         'Alunos': '☀️',
+        'Turmas': '🏷️',
         'Prontuário do Aluno': '📁',
         'Pais e Responsáveis': '☎️',
         'Registros de Acompanhamento': '📝',
         'Relatórios': '📊',
+        'Impressão/PDF': '🖨️',
         'Biblioteca de Estratégias': '💡',
         'Gestão de Usuários': '👥',
         'Administração do Sistema': '📣',
@@ -60,12 +110,12 @@ def frame(nav_title: str):
                     ui.label('Rotina escolar com carinho').classes('app-muted text-[11px] font-bold uppercase hidden sm:block')
 
         with ui.row().classes('items-center gap-4'):
-            theme_icon = 'light_mode' if config.get('modo_escuro') else 'dark_mode'
-            ui.button(icon=theme_icon, on_click=toggle_theme).props('flat round').classes('app-muted').tooltip('Alternar tema')
+            theme_icon = 'light_mode' if preferencias.get('modo_escuro') else 'dark_mode'
+            theme_button = ui.button(icon=theme_icon, on_click=toggle_theme).props('flat round').classes('app-muted').tooltip('Alternar tema')
 
             with ui.row().classes('items-center gap-2 cursor-pointer'):
                 with ui.column().classes('gap-0 items-end hidden md:flex'):
-                    ui.label(nome_usuario.split(' ')[0]).classes('font-bold leading-none')
+                    ui.label(nome_topo).classes('font-bold leading-none')
                     ui.label(cargo_usuario).classes('app-muted text-[10px] uppercase')
 
                 if foto_usuario:
@@ -84,10 +134,13 @@ def frame(nav_title: str):
                 ui.button(name, icon=icon, on_click=lambda r=route: ui.navigate.to(r)).classes('w-full justify-start menu-link').props('flat no-caps')
 
             menu_btn('🏫 Dashboard', 'space_dashboard', '/')
+            menu_btn('🗓️ Agenda', 'event_note', '/agenda')
             menu_btn('☀️ Alunos', 'face', '/alunos')
+            menu_btn('🏷️ Turmas', 'class', '/turmas')
             menu_btn('☎️ Pais', 'contact_phone', '/pais')
             menu_btn('📝 Registros', 'edit_note', '/registros')
             menu_btn('📊 Relatórios', 'analytics', '/relatorios')
+            menu_btn('🖨️ Impressão/PDF', 'print', '/impressao')
             menu_btn('💡 Estratégias', 'auto_awesome', '/estrategias')
 
             if cargo_usuario in ['Administrador', 'Coordenador']:

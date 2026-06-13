@@ -1,9 +1,37 @@
 import datetime
+import json
 
 from nicegui import app, ui
 
 from database import load_data, save_data
 from layout import frame
+
+
+BACKUP_DEFAULTS = {
+    'agenda.json': [],
+    'alunos.json': [],
+    'turmas.json': [],
+    'pais.json': [],
+    'registros.json': [],
+    'estrategias.json': [],
+    'comunicados.json': [],
+    'despesas.json': [],
+    'usuarios.json': [],
+    'config.json': {'modo_escuro': False},
+}
+
+BACKUP_INFO = [
+    ('agenda.json', '🗓️ Agenda', 'Rotina diária, horários e responsáveis.'),
+    ('alunos.json', '☀️ Alunos', 'Cadastros e observações importantes.'),
+    ('turmas.json', '🏷️ Turmas', 'Organização de salas, períodos e professores.'),
+    ('pais.json', '☎️ Famílias', 'Contatos dos responsáveis e canais de comunicação.'),
+    ('registros.json', '📝 Registros', 'Acompanhamentos, ações e próximos passos.'),
+    ('estrategias.json', '💡 Estratégias', 'Biblioteca pedagógica da equipe.'),
+    ('comunicados.json', '📣 Comunicados', 'Avisos internos publicados pela gestão.'),
+    ('despesas.json', '💰 Despesas', 'Controle financeiro simples da administração.'),
+    ('usuarios.json', '👥 Usuários', 'Perfis e permissões do sistema.'),
+    ('config.json', '⚙️ Configurações', 'Preferências gerais do sistema.'),
+]
 
 
 def _valor_filtro(valor, padrao='Todos'):
@@ -34,6 +62,73 @@ def render():
 
         comunicados = load_data('comunicados.json', [])
         despesas = load_data('despesas.json', [])
+
+        ui.add_css('''
+            .admin-data-row {
+                background: var(--app-surface-muted) !important;
+                border-radius: 8px;
+            }
+
+            .admin-backup-note {
+                border: 1px solid color-mix(in srgb, var(--app-amber) 28%, transparent);
+            }
+        ''')
+
+        def baixar_backup_completo():
+            agora = datetime.datetime.now()
+            backup = {
+                'sistema': 'Ruth See Escola',
+                'tipo': 'backup-dados',
+                'gerado_em': agora.strftime('%d/%m/%Y %H:%M'),
+                'arquivos': {
+                    filename: load_data(filename, default)
+                    for filename, default in BACKUP_DEFAULTS.items()
+                },
+            }
+            conteudo = json.dumps(backup, ensure_ascii=False, indent=4)
+            nome_arquivo = f"ruth-see-backup-{agora.strftime('%Y-%m-%d-%H%M')}.json"
+            ui.download.content(conteudo, nome_arquivo, 'application/json')
+
+        async def restaurar_backup(event):
+            if not confirmar_restore.value:
+                ui.notify('Marque a confirmação antes de restaurar um backup.', type='warning')
+                return
+
+            try:
+                backup = await event.file.json()
+            except Exception:
+                ui.notify('Não consegui ler o arquivo. Envie um backup JSON válido.', type='negative')
+                return
+
+            arquivos = backup.get('arquivos') if isinstance(backup, dict) else None
+            if not isinstance(arquivos, dict):
+                ui.notify('Este arquivo não parece ser um backup da Ruth See Escola.', type='negative')
+                return
+
+            restaurados = []
+            for filename, default in BACKUP_DEFAULTS.items():
+                if filename not in arquivos:
+                    continue
+
+                conteudo = arquivos[filename]
+                tipo_esperado = list if isinstance(default, list) else dict
+                if not isinstance(conteudo, tipo_esperado):
+                    ui.notify(f'O arquivo {filename} está em um formato inválido.', type='negative')
+                    return
+                restaurados.append((filename, conteudo))
+
+            if not restaurados:
+                ui.notify('O backup não contém arquivos reconhecidos para restaurar.', type='warning')
+                return
+
+            for filename, conteudo in restaurados:
+                save_data(filename, conteudo)
+
+            confirmar_restore.value = False
+            confirmar_restore.update()
+            restore_status.set_text(f'{len(restaurados)} arquivo(s) restaurado(s). A página será atualizada.')
+            ui.notify('Backup restaurado com sucesso.', type='positive')
+            ui.timer(1.0, lambda: ui.navigate.reload(), once=True)
 
         def salvar_comunicado():
             if not titulo_input.value or not mensagem_input.value:
@@ -128,6 +223,7 @@ def render():
             with ui.tabs().classes('w-full') as tabs:
                 tab_comunicados = ui.tab('📣 Comunicados', icon='campaign')
                 tab_despesas = ui.tab('💰 Despesas', icon='account_balance_wallet')
+                tab_backup = ui.tab('💾 Backup', icon='backup')
 
             with ui.tab_panels(tabs, value=tab_comunicados).classes('w-full bg-transparent p-0'):
                 with ui.tab_panel(tab_comunicados).classes('p-0'):
@@ -288,3 +384,40 @@ def render():
                     data_despesa_filter.on_value_change(lambda _: atualizar_lista_despesas())
                     valor_despesa_filter.on_value_change(lambda _: atualizar_lista_despesas())
                     atualizar_lista_despesas()
+
+                with ui.tab_panel(tab_backup).classes('p-0'):
+                    with ui.grid(columns=1).classes('w-full gap-5 lg:grid-cols-3'):
+                        with ui.card().classes('app-card w-full p-5 lg:col-span-2'):
+                            with ui.row().classes('w-full items-start justify-between gap-4 mb-4'):
+                                with ui.column().classes('gap-1'):
+                                    ui.label('💾 Segurança dos dados').classes('text-xl font-black')
+                                    ui.label('Guarde uma cópia completa dos arquivos JSON da escola.').classes('app-muted text-sm')
+                                ui.button('Baixar backup completo', icon='download', on_click=baixar_backup_completo).props('unelevated color=primary')
+
+                            with ui.column().classes('w-full gap-2'):
+                                for filename, titulo, descricao in BACKUP_INFO:
+                                    dados = load_data(filename, BACKUP_DEFAULTS[filename])
+                                    quantidade = len(dados) if isinstance(dados, list) else len(dados.keys())
+                                    with ui.row().classes('admin-data-row w-full items-center justify-between gap-3 p-3'):
+                                        with ui.column().classes('gap-0 min-w-0'):
+                                            ui.label(titulo).classes('font-black')
+                                            ui.label(descricao).classes('app-muted text-xs leading-relaxed')
+                                        with ui.column().classes('items-end gap-0 shrink-0'):
+                                            ui.label(filename).classes('app-muted text-[10px] font-bold uppercase')
+                                            ui.label(str(quantidade)).classes('text-lg font-black')
+
+                        with ui.card().classes('app-card w-full p-5'):
+                            ui.label('Restaurar backup').classes('text-xl font-black mb-2')
+                            ui.label('Use apenas arquivos baixados por este sistema. A restauração substitui os dados atuais.').classes('app-muted text-sm leading-relaxed mb-4')
+                            confirmar_restore = ui.checkbox('Confirmo que quero substituir os dados atuais').classes('mb-3')
+                            restore_status = ui.label('').classes('app-muted text-xs font-bold mb-3')
+                            ui.upload(
+                                label='Selecionar backup JSON',
+                                on_upload=restaurar_backup,
+                                auto_upload=True,
+                                max_file_size=5 * 1024 * 1024,
+                            ).props('accept=.json color=primary').classes('w-full')
+
+                            with ui.column().classes('admin-backup-note soft-amber w-full gap-1 p-3 rounded-lg mt-4'):
+                                ui.label('✨ Dica prática').classes('font-black text-sm')
+                                ui.label('Baixe um backup antes de grandes alterações, apresentações ou troca de computador.').classes('app-muted text-xs leading-relaxed')
