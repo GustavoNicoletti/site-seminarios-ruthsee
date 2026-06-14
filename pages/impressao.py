@@ -4,6 +4,7 @@ from nicegui import ui
 
 from database import load_data
 from layout import frame
+from permissions import require_permission
 
 
 def _texto(valor, padrao='Não informado'):
@@ -52,6 +53,9 @@ def _estrategias_sugeridas(aluno, estrategias):
 
 def render(aluno_index=None):
     with frame('Impressão/PDF'):
+        if not require_permission('view_impressao'):
+            return
+
         alunos = load_data('alunos.json', [])
 
         ui.add_css('''

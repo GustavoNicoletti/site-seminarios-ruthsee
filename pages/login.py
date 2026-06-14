@@ -1,8 +1,23 @@
 from nicegui import app, ui
 
 from auth import get_admin_credentials
-from database import load_data
+from database import load_data, save_data
+from permissions import permissoes_do_cargo
 from theme import add_app_theme
+from user_security import migrar_senha_legada, senha_confere
+
+
+PAGINA_PERMISSAO = {
+    '/': 'view_dashboard',
+    '/agenda': 'view_agenda',
+    '/alunos': 'view_alunos',
+    '/turmas': 'view_turmas',
+    '/pais': 'view_pais',
+    '/registros': 'view_registros',
+    '/relatorios': 'view_relatorios',
+    '/impressao': 'view_impressao',
+    '/estrategias': 'view_estrategias',
+}
 
 
 def render():
@@ -52,22 +67,6 @@ def render():
             box-shadow: var(--app-soft-shadow);
         }
 
-        .login-profile-preview {
-            background: color-mix(in srgb, var(--app-surface) 88%, transparent) !important;
-            border: 1px solid var(--app-border);
-            border-radius: 8px;
-            box-shadow: var(--app-soft-shadow);
-            backdrop-filter: blur(12px);
-        }
-
-        .login-profile-photo {
-            width: 3rem;
-            height: 3rem;
-            border-radius: 8px;
-            object-fit: cover;
-            border: 1px solid var(--app-border);
-        }
-
         .login-mini-note {
             background: var(--app-surface-muted) !important;
             border: 1px solid var(--app-border);
@@ -88,8 +87,6 @@ def render():
         }
     ''')
 
-    preview_state = {'container': None}
-
     def _login_usuario(usuario):
         return str(usuario or '').strip().lower()
 
@@ -100,42 +97,10 @@ def render():
     def _pagina_inicial(usuario):
         rotas_validas = {'/', '/agenda', '/alunos', '/turmas', '/pais', '/registros', '/relatorios', '/impressao', '/estrategias'}
         pagina = _preferencias(usuario).get('pagina_inicial', '/')
-        return pagina if pagina in rotas_validas else '/'
-
-    def usuario_por_login(login):
-        login = _login_usuario(login)
-        if not login:
-            return None
-        admin_usuario, _ = get_admin_credentials()
-        if login == _login_usuario(admin_usuario):
-            return {
-                'nome': config.get('nome') or 'Administrador Padrão',
-                'cargo': config.get('cargo') or 'Administrador',
-                'foto': config.get('foto', ''),
-                'usuario': admin_usuario,
-                'preferencias': config.get('preferencias', {}),
-            }
-        return next((u for u in usuarios if _login_usuario(u.get('usuario') or u.get('email')) == login), None)
-
-    def atualizar_preview():
-        preview_container = preview_state['container']
-        if preview_container is None:
-            return
-        preview_container.clear()
-        usuario = usuario_por_login(usuario_input.value)
-        preview_container.visible = bool(usuario)
-        with preview_container:
-            if usuario:
-                foto = usuario.get('foto', '').strip()
-                nome = usuario.get('nome', 'Usuário')
-                if foto:
-                    ui.image(foto).classes('login-profile-photo')
-                else:
-                    ui.avatar(nome[0].upper()).classes('brand-badge text-white font-black w-12 h-12')
-                with ui.column().classes('gap-0 min-w-0'):
-                    ui.label(nome.split(' ')[0]).classes('font-black leading-tight')
-                    ui.label(usuario.get('cargo', 'Equipe escolar')).classes('app-muted text-xs font-bold uppercase')
-        preview_container.update()
+        permissao = PAGINA_PERMISSAO.get(pagina)
+        if pagina in rotas_validas and permissao in permissoes_do_cargo(usuario.get('cargo', 'Professor')):
+            return pagina
+        return '/'
 
     with ui.row().classes('login-shell w-full min-h-screen items-center justify-center p-4'):
         with ui.row().classes('app-card login-card overflow-hidden'):
@@ -154,14 +119,9 @@ def render():
                     with usuario_input.add_slot('prepend'):
                         ui.icon('person').classes('app-muted')
 
-                    preview_state['container'] = ui.row().classes('login-profile-preview w-full items-center gap-3 px-3 py-2 mb-3')
-                    preview_state['container'].visible = False
-
                     senha_input = ui.input('Senha', password=True, password_toggle_button=True).classes('w-full mb-5').props('outlined autocomplete=current-password')
                     with senha_input.add_slot('prepend'):
                         ui.icon('lock').classes('app-muted')
-                    usuario_input.on_value_change(lambda _: atualizar_preview())
-                    atualizar_preview()
 
                     def fazer_login():
                         login = usuario_input.value
@@ -195,14 +155,20 @@ def render():
                             (
                                 u for u in usuarios
                                 if _login_usuario(u.get('usuario') or u.get('email')) == _login_usuario(login)
-                                and u.get('senha') == senha
+                                and senha_confere(u, senha)
                             ),
                             None,
                         )
 
                         if usuario_valido:
+                            usuario_alterado = False
                             if not usuario_valido.get('usuario'):
                                 usuario_valido['usuario'] = usuario_valido.get('email', '')
+                                usuario_alterado = True
+                            if migrar_senha_legada(usuario_valido, senha):
+                                usuario_alterado = True
+                            if usuario_alterado:
+                                save_data('usuarios.json', usuarios)
                             app.storage.user.update(usuario_valido)
                             primeiro_nome = usuario_valido.get('nome', 'Usuário').split(' ')[0]
                             ui.notify(f'Bem-vindo(a), {primeiro_nome}! ⭐', type='positive')
@@ -214,4 +180,4 @@ def render():
                     usuario_input.on('keydown.enter', lambda _: fazer_login())
 
                     ui.button('Entrar no sistema', icon='login', on_click=fazer_login).classes('w-full py-3 text-base font-bold mb-4').props('unelevated color=primary no-caps')
-                    ui.label('Dados salvos localmente em arquivos JSON.').classes('app-muted text-xs text-center')
+                    ui.label('Dados salvos localmente em banco SQLite.').classes('app-muted text-xs text-center')

@@ -5,6 +5,7 @@ from nicegui import ui
 
 from database import load_data
 from layout import frame
+from permissions import require_permission
 
 
 def _texto(valor, padrao='Não informado'):
@@ -26,6 +27,9 @@ def _csv_download(nome_arquivo, cabecalhos, linhas):
 
 def render():
     with frame('Relatórios'):
+        if not require_permission('view_relatorios'):
+            return
+
         agenda = load_data('agenda.json', [])
         alunos = load_data('alunos.json', [])
         turmas = load_data('turmas.json', [])

@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from nicegui import app, ui
 
 from database import load_data, save_data
+from permissions import has_permission
 from theme import add_app_theme
 
 
@@ -133,24 +134,36 @@ def frame(nav_title: str):
             def menu_btn(name, icon, route):
                 ui.button(name, icon=icon, on_click=lambda r=route: ui.navigate.to(r)).classes('w-full justify-start menu-link').props('flat no-caps')
 
-            menu_btn('🏫 Dashboard', 'space_dashboard', '/')
-            menu_btn('🗓️ Agenda', 'event_note', '/agenda')
-            menu_btn('☀️ Alunos', 'face', '/alunos')
-            menu_btn('🏷️ Turmas', 'class', '/turmas')
-            menu_btn('☎️ Pais', 'contact_phone', '/pais')
-            menu_btn('📝 Registros', 'edit_note', '/registros')
-            menu_btn('📊 Relatórios', 'analytics', '/relatorios')
-            menu_btn('🖨️ Impressão/PDF', 'print', '/impressao')
-            menu_btn('💡 Estratégias', 'auto_awesome', '/estrategias')
+            if has_permission('view_dashboard'):
+                menu_btn('🏫 Dashboard', 'space_dashboard', '/')
+            if has_permission('view_agenda'):
+                menu_btn('🗓️ Agenda', 'event_note', '/agenda')
+            if has_permission('view_alunos'):
+                menu_btn('☀️ Alunos', 'face', '/alunos')
+            if has_permission('view_turmas'):
+                menu_btn('🏷️ Turmas', 'class', '/turmas')
+            if has_permission('view_pais'):
+                menu_btn('☎️ Pais', 'contact_phone', '/pais')
+            if has_permission('view_registros'):
+                menu_btn('📝 Registros', 'edit_note', '/registros')
+            if has_permission('view_relatorios'):
+                menu_btn('📊 Relatórios', 'analytics', '/relatorios')
+            if has_permission('view_impressao'):
+                menu_btn('🖨️ Impressão/PDF', 'print', '/impressao')
+            if has_permission('view_estrategias'):
+                menu_btn('💡 Estratégias', 'auto_awesome', '/estrategias')
 
-            if cargo_usuario in ['Administrador', 'Coordenador']:
+            if has_permission('view_admin') or has_permission('manage_users'):
                 ui.separator().classes('my-2')
                 ui.label('GESTÃO 🤝').classes('app-muted text-xs font-bold')
-                menu_btn('👥 Usuários', 'people', '/usuarios')
-                menu_btn('📣 Administração', 'admin_panel_settings', '/admin')
+                if has_permission('manage_users'):
+                    menu_btn('👥 Usuários', 'people', '/usuarios')
+                if has_permission('view_admin'):
+                    menu_btn('📣 Administração', 'admin_panel_settings', '/admin')
 
         with ui.column().classes('w-full p-4'):
-            menu_btn('⚙️ Configurações', 'tune', '/config')
+            if has_permission('view_config'):
+                menu_btn('⚙️ Configurações', 'tune', '/config')
 
     with ui.column().classes('w-full max-w-7xl mx-auto px-5 md:px-8 py-6 mt-16 gap-6'):
         with ui.row().classes('items-center gap-3'):

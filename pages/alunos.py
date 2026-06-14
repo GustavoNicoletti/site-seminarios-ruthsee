@@ -1,7 +1,11 @@
+import uuid
+
 from nicegui import ui
 
 from database import load_data, save_data
 from layout import frame
+from permissions import has_permission, require_permission
+from student_links import garantir_ids_alunos, item_vinculado_ao_aluno, normalizar
 
 
 def _texto(valor, padrao='Não informado'):
@@ -17,8 +21,15 @@ def _valor_filtro(valor, padrao='Todos'):
 
 def render():
     with frame('Alunos'):
+        if not require_permission('view_alunos'):
+            return
+
         alunos = load_data('alunos.json', [])
+        if garantir_ids_alunos(alunos):
+            save_data('alunos.json', alunos)
+
         editing_index = {'value': -1}
+        pode_gerir = has_permission('manage_alunos')
 
         ui.add_css('''
             .students-page {
@@ -144,11 +155,17 @@ def render():
             dialog.open()
 
         def salvar_aluno():
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite alterar cadastros de alunos.', type='warning')
+                return
             if not nome_input.value or not turma_input.value:
                 ui.notify('Nome e turma são obrigatórios.', type='warning')
                 return
 
+            aluno_anterior = alunos[editing_index['value']] if editing_index['value'] >= 0 else {}
+
             dados = {
+                'id': aluno_anterior.get('id') or uuid.uuid4().hex[:12],
                 'nome': nome_input.value.strip(),
                 'turma': turma_input.value.strip(),
                 'nascimento': (nascimento_input.value or '').strip(),
@@ -159,6 +176,18 @@ def render():
 
             if editing_index['value'] >= 0:
                 alunos[editing_index['value']] = dados
+                responsaveis = load_data('pais.json', [])
+                alterou_responsaveis = False
+                for responsavel in responsaveis:
+                    if responsavel.get('aluno_id') == dados['id'] or (
+                        not responsavel.get('aluno_id')
+                        and normalizar(responsavel.get('aluno')) == normalizar(aluno_anterior.get('nome'))
+                    ):
+                        responsavel['aluno_id'] = dados['id']
+                        responsavel['aluno'] = dados['nome']
+                        alterou_responsaveis = True
+                if alterou_responsaveis:
+                    save_data('pais.json', responsaveis)
                 ui.notify('Dados do aluno atualizados.', type='positive')
             else:
                 alunos.append(dados)
@@ -171,11 +200,18 @@ def render():
             atualizar_lista()
 
         def confirmar_exclusao(aluno):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite excluir alunos.', type='warning')
+                return
+            responsaveis = load_data('pais.json', [])
+            total_responsaveis = sum(1 for responsavel in responsaveis if item_vinculado_ao_aluno(responsavel, aluno))
             with ui.dialog() as confirm_dialog, ui.card().classes('app-card w-full max-w-sm p-6'):
                 with ui.column().classes('w-full items-center text-center gap-3'):
                     ui.icon('warning', color='red', size='3rem')
                     ui.label('Excluir aluno').classes('text-2xl font-bold')
                     ui.label(f'Deseja remover "{aluno["nome"]}" do acompanhamento?').classes('student-muted text-sm')
+                    if total_responsaveis:
+                        ui.label(f'{total_responsaveis} responsável(is) vinculado(s) também serão excluídos.').classes('text-red-600 text-xs font-black')
                     with ui.row().classes('w-full justify-center gap-3 pt-3'):
                         ui.button('Cancelar', on_click=confirm_dialog.close).props('flat color=slate')
                         ui.button('Excluir', icon='delete', on_click=lambda: apagar_aluno(aluno, confirm_dialog)).props('unelevated color=red')
@@ -184,7 +220,13 @@ def render():
         def apagar_aluno(aluno, confirm_dialog):
             alunos.remove(aluno)
             save_data('alunos.json', alunos)
-            ui.notify('Aluno removido.', type='warning')
+            responsaveis = load_data('pais.json', [])
+            restantes = [responsavel for responsavel in responsaveis if not item_vinculado_ao_aluno(responsavel, aluno)]
+            removidos = len(responsaveis) - len(restantes)
+            if removidos:
+                save_data('pais.json', restantes)
+            mensagem = f'Aluno removido. {removidos} responsável(is) vinculado(s) excluído(s).' if removidos else 'Aluno removido.'
+            ui.notify(mensagem, type='warning')
             confirm_dialog.close()
             atualizar_opcoes_turma()
             atualizar_resumo()
@@ -218,7 +260,8 @@ def render():
                     ui.label('☀️ Acompanhamento escolar').classes('student-muted text-sm font-black uppercase')
                     ui.label('Cada aluno com suas pistas de cuidado').classes('text-3xl font-black leading-tight')
                     ui.label('Informações importantes em cards coloridos, claros e fáceis de consultar.').classes('student-muted text-sm')
-                ui.button('Novo aluno ✨', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                if pode_gerir:
+                    ui.button('Novo aluno ✨', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
             with ui.row().classes('app-toolbar w-full items-center justify-between gap-4 p-4'):
                 with ui.row().classes('flex-1 items-center gap-3 flex-wrap'):
@@ -252,8 +295,9 @@ def render():
                                         ui.label('🏫').classes('text-sm')
                                         ui.label(turma).classes('student-pill text-xs font-black px-2 py-1')
                             with ui.row().classes('gap-1 shrink-0'):
-                                ui.button(icon='edit', on_click=lambda i=index, a=aluno: abrir_modal(a, i)).props('flat round size=sm').classes('student-muted').tooltip('Editar')
-                                ui.button(icon='delete', on_click=lambda a=aluno: confirmar_exclusao(a)).props('flat round size=sm').classes('student-muted').tooltip('Excluir')
+                                if pode_gerir:
+                                    ui.button(icon='edit', on_click=lambda i=index, a=aluno: abrir_modal(a, i)).props('flat round size=sm').classes('student-muted').tooltip('Editar')
+                                    ui.button(icon='delete', on_click=lambda a=aluno: confirmar_exclusao(a)).props('flat round size=sm').classes('student-muted').tooltip('Excluir')
 
                         with ui.column().classes('w-full gap-4 p-5 flex-grow'):
                             with ui.row().classes('items-center gap-2'):
@@ -279,7 +323,8 @@ def render():
                         ui.icon('manage_search', size='4rem').classes('student-muted')
                         ui.label('Nenhum aluno encontrado 🌱').classes('text-xl font-bold')
                         ui.label('Ajuste os filtros ou cadastre um novo aluno.').classes('student-muted text-sm')
-                        ui.button('Novo aluno ✨', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                        if pode_gerir:
+                            ui.button('Novo aluno ✨', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
         pesquisa_input.on_value_change(lambda _: (atualizar_resumo(), atualizar_lista()))
         turma_filter.on_value_change(lambda _: (atualizar_resumo(), atualizar_lista()))

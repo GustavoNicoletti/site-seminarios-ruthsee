@@ -2,6 +2,7 @@ from nicegui import ui
 
 from database import load_data, save_data
 from layout import frame
+from permissions import has_permission, require_permission
 
 
 def _valor_filtro(valor, padrao='Todos'):
@@ -12,7 +13,11 @@ def _valor_filtro(valor, padrao='Todos'):
 
 def render():
     with frame('Biblioteca de Estratégias'):
+        if not require_permission('view_estrategias'):
+            return
+
         estrategias = load_data('estrategias.json', [])
+        pode_gerir = has_permission('manage_estrategias')
 
         categorias = [
             '💬 Comunicação',
@@ -57,6 +62,9 @@ def render():
             )
 
         def abrir_modal(estrategia=None, index=-1):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite alterar estratégias.', type='warning')
+                return
             editing_index['value'] = index
             if estrategia:
                 titulo_input.value = estrategia.get('titulo', '')
@@ -77,6 +85,9 @@ def render():
             dialog.open()
 
         def salvar_estrategia():
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite salvar estratégias.', type='warning')
+                return
             if not titulo_input.value:
                 ui.notify('O título é obrigatório. 😊', type='warning')
                 return
@@ -102,6 +113,9 @@ def render():
             atualizar_lista()
 
         def confirmar_exclusao(estrategia):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite excluir estratégias.', type='warning')
+                return
             with ui.dialog() as confirm_dialog, ui.card().classes('app-card w-full max-w-md p-6'):
                 ui.label('Excluir estratégia').classes('text-xl font-black text-red-600 mb-3')
                 ui.label(f'Deseja apagar "{estrategia["titulo"]}"?').classes('app-muted text-sm')
@@ -145,7 +159,8 @@ def render():
                     ui.label('💡 Biblioteca viva').classes('app-muted text-sm font-black uppercase')
                     ui.label('Estratégias para acolher, comunicar e ensinar').classes('text-3xl font-black leading-tight')
                     ui.label('Ideias práticas para ajudar a equipe a responder com mais segurança e carinho.').classes('app-muted text-sm')
-                ui.button('Nova estratégia ✨', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                if pode_gerir:
+                    ui.button('Nova estratégia ✨', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
             with ui.row().classes('app-toolbar w-full items-center justify-between gap-4 p-4'):
                 with ui.row().classes('flex-1 items-center gap-3 flex-wrap'):
@@ -191,9 +206,10 @@ def render():
                     with ui.card().classes('app-card w-full p-5 flex flex-col h-full'):
                         with ui.row().classes('w-full justify-between items-start gap-3 mb-3'):
                             ui.label(normalizar_categoria(estrategia.get('categoria', 'Geral'))).classes('student-pill text-xs font-black px-3 py-1')
-                            with ui.row().classes('gap-1'):
-                                ui.button(icon='edit', on_click=lambda i=index, est=estrategia: abrir_modal(est, i)).props('flat color=primary size=sm round padding=xs').tooltip('Editar')
-                                ui.button(icon='delete', on_click=lambda est=estrategia: confirmar_exclusao(est)).props('flat color=red size=sm round padding=xs').tooltip('Remover')
+                            if pode_gerir:
+                                with ui.row().classes('gap-1'):
+                                    ui.button(icon='edit', on_click=lambda i=index, est=estrategia: abrir_modal(est, i)).props('flat color=primary size=sm round padding=xs').tooltip('Editar')
+                                    ui.button(icon='delete', on_click=lambda est=estrategia: confirmar_exclusao(est)).props('flat color=red size=sm round padding=xs').tooltip('Remover')
 
                         ui.label(estrategia.get('titulo', 'Sem título')).classes('text-xl font-black mb-2 line-clamp-2')
                         ui.label(conteudo).classes('app-muted text-sm leading-relaxed flex-grow mb-4')
@@ -212,7 +228,8 @@ def render():
                         ui.label('🔎').classes('text-5xl')
                         ui.label('Nenhuma estratégia encontrada').classes('text-xl font-black')
                         ui.label('Tente outra busca ou cadastre uma nova ideia.').classes('app-muted text-sm')
-                        ui.button('Nova estratégia ✨', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                        if pode_gerir:
+                            ui.button('Nova estratégia ✨', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
         busca_input.on_value_change(lambda _: atualizar_lista())
         categoria_filter.on_value_change(lambda _: atualizar_lista())

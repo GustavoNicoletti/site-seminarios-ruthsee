@@ -2,6 +2,8 @@ from nicegui import ui
 
 from database import load_data, save_data
 from layout import frame
+from permissions import has_permission, require_permission
+from student_links import aluno_por_id, garantir_ids_alunos, id_aluno_por_nome, item_vinculado_ao_aluno, nome_aluno_vinculado, opcoes_alunos
 
 
 def _texto(valor, padrao='Não informado'):
@@ -21,9 +23,27 @@ def _valor_filtro(valor, padrao='Todos'):
 
 def render():
     with frame('Pais e Responsáveis'):
+        if not require_permission('view_pais'):
+            return
+
         responsaveis = load_data('pais.json', [])
         alunos = load_data('alunos.json', [])
+        if garantir_ids_alunos(alunos):
+            save_data('alunos.json', alunos)
+
+        alterou_vinculos = False
+        for responsavel in responsaveis:
+            if not responsavel.get('aluno_id'):
+                aluno_id = id_aluno_por_nome(alunos, responsavel.get('aluno'))
+                if aluno_id:
+                    responsavel['aluno_id'] = aluno_id
+                    responsavel['aluno'] = nome_aluno_vinculado(alunos, responsavel)
+                    alterou_vinculos = True
+        if alterou_vinculos:
+            save_data('pais.json', responsaveis)
+
         editing_index = {'value': -1}
+        pode_gerir = has_permission('manage_pais')
 
         ui.add_css('''
             .parent-card {
@@ -44,13 +64,10 @@ def render():
         ''')
 
         def get_alunos_options(extra_aluno=''):
-            nomes = {aluno.get('nome', '').strip() for aluno in alunos if aluno.get('nome', '').strip()}
-            if extra_aluno:
-                nomes.add(extra_aluno.strip())
-            return sorted(nomes)
+            return opcoes_alunos(alunos)
 
         def get_alunos_filter_options():
-            return ['Todos'] + get_alunos_options()
+            return {'Todos': 'Todos', **get_alunos_options()}
 
         def get_parentescos_options():
             parentescos = {item.get('parentesco', '').strip() for item in responsaveis if item.get('parentesco', '').strip()}
@@ -69,7 +86,7 @@ def render():
             for index, responsavel in enumerate(responsaveis):
                 texto_busca = ' '.join([
                     responsavel.get('nome', ''),
-                    responsavel.get('aluno', ''),
+                    nome_aluno_vinculado(alunos, responsavel),
                     responsavel.get('parentesco', ''),
                     responsavel.get('telefone', ''),
                     responsavel.get('email', ''),
@@ -78,7 +95,8 @@ def render():
 
                 if termo and termo not in texto_busca:
                     continue
-                if aluno_selecionado != 'Todos' and responsavel.get('aluno') != aluno_selecionado:
+                aluno_filtro = aluno_por_id(alunos, aluno_selecionado)
+                if aluno_selecionado != 'Todos' and (not aluno_filtro or not item_vinculado_ao_aluno(responsavel, aluno_filtro)):
                     continue
                 if parentesco_selecionado != 'Todos' and responsavel.get('parentesco') != parentesco_selecionado:
                     continue
@@ -113,12 +131,17 @@ def render():
             pass
 
         def abrir_modal(responsavel=None, index=-1):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite alterar contatos familiares.', type='warning')
+                return
             editing_index['value'] = index
 
             nome_input.value = responsavel.get('nome', '') if responsavel else ''
-            aluno_atual = responsavel.get('aluno', '') if responsavel else ''
-            aluno_input.options = get_alunos_options(aluno_atual)
-            aluno_input.value = aluno_atual or (aluno_input.options[0] if aluno_input.options else None)
+            aluno_atual_id = ''
+            if responsavel:
+                aluno_atual_id = responsavel.get('aluno_id') or id_aluno_por_nome(alunos, responsavel.get('aluno'))
+            aluno_input.options = get_alunos_options()
+            aluno_input.value = aluno_atual_id or (next(iter(aluno_input.options), None) if aluno_input.options else None)
             aluno_input.update()
             parentesco_input.value = responsavel.get('parentesco', 'Responsável') if responsavel else 'Responsável'
             telefone_input.value = responsavel.get('telefone', '') if responsavel else ''
@@ -130,15 +153,17 @@ def render():
             dialog.open()
 
         def salvar_responsavel():
-            aluno_selecionado = str(aluno_input.value or '').strip()
+            aluno_selecionado = _valor_filtro(aluno_input.value, '')
+            aluno_vinculado = aluno_por_id(alunos, aluno_selecionado)
 
-            if not nome_input.value or not aluno_selecionado:
+            if not nome_input.value or not aluno_vinculado:
                 ui.notify('Nome do responsável e aluno são obrigatórios.', type='warning')
                 return
 
             dados = {
                 'nome': nome_input.value.strip(),
-                'aluno': aluno_selecionado,
+                'aluno_id': aluno_vinculado.get('id'),
+                'aluno': aluno_vinculado.get('nome', ''),
                 'parentesco': parentesco_input.value,
                 'telefone': (telefone_input.value or '').strip(),
                 'whatsapp': (whatsapp_input.value or '').strip(),
@@ -160,6 +185,9 @@ def render():
             atualizar_lista()
 
         def confirmar_exclusao(responsavel):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite excluir contatos familiares.', type='warning')
+                return
             with ui.dialog() as confirm_dialog, ui.card().classes('app-card w-full max-w-md p-6'):
                 ui.label('Excluir contato').classes('text-xl font-black text-red-600 mb-3')
                 ui.label(f'Deseja apagar "{responsavel["nome"]}"?').classes('app-muted text-sm')
@@ -204,7 +232,8 @@ def render():
                     ui.label('☎️ Comunicação com famílias').classes('app-muted text-sm font-black uppercase')
                     ui.label('Contatos de pais e responsáveis').classes('text-3xl font-black leading-tight')
                     ui.label('Centralize telefones, WhatsApp e e-mails para recados importantes da escola.').classes('app-muted text-sm')
-                ui.button('Novo contato', icon='person_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                if pode_gerir:
+                    ui.button('Novo contato', icon='person_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
             with ui.row().classes('app-toolbar w-full items-center justify-between gap-4 p-4'):
                 with ui.row().classes('flex-1 items-center gap-3 flex-wrap'):
@@ -223,7 +252,7 @@ def render():
             with container_lista:
                 for index, responsavel in filtrados:
                     nome = _texto(responsavel.get('nome'), 'Responsável')
-                    aluno = _texto(responsavel.get('aluno'), 'Aluno não informado')
+                    aluno = _texto(nome_aluno_vinculado(alunos, responsavel), 'Aluno não informado')
                     parentesco = _texto(responsavel.get('parentesco'), 'Responsável')
                     telefone = _texto(responsavel.get('telefone'))
                     whatsapp = responsavel.get('whatsapp') or responsavel.get('telefone')
@@ -239,8 +268,9 @@ def render():
                                     ui.label(nome).classes('text-lg font-black line-clamp-1')
                                     ui.label(f'{parentesco} de {aluno}').classes('app-muted text-sm line-clamp-1')
                             with ui.row().classes('gap-1 shrink-0'):
-                                ui.button(icon='edit', on_click=lambda i=index, r=responsavel: abrir_modal(r, i)).props('flat color=primary round size=sm').tooltip('Editar')
-                                ui.button(icon='delete', on_click=lambda r=responsavel: confirmar_exclusao(r)).props('flat color=red round size=sm').tooltip('Excluir')
+                                if pode_gerir:
+                                    ui.button(icon='edit', on_click=lambda i=index, r=responsavel: abrir_modal(r, i)).props('flat color=primary round size=sm').tooltip('Editar')
+                                    ui.button(icon='delete', on_click=lambda r=responsavel: confirmar_exclusao(r)).props('flat color=red round size=sm').tooltip('Excluir')
 
                         with ui.column().classes('w-full gap-3 flex-grow'):
                             with ui.row().classes('contact-line w-full items-center gap-2 p-3'):
@@ -265,7 +295,8 @@ def render():
                         ui.label('☎️').classes('text-5xl')
                         ui.label('Nenhum contato encontrado').classes('text-xl font-black')
                         ui.label('Cadastre pais e responsáveis para facilitar a comunicação.').classes('app-muted text-sm')
-                        ui.button('Novo contato', icon='person_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                        if pode_gerir:
+                            ui.button('Novo contato', icon='person_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
         pesquisa_input.on_value_change(lambda _: (atualizar_resumo(), atualizar_lista()))
         aluno_filter.on_value_change(lambda _: (atualizar_resumo(), atualizar_lista()))

@@ -1,9 +1,11 @@
 import datetime
 
-from nicegui import app, ui
+from nicegui import ui
 
 from database import load_data, save_data
 from layout import frame
+from permissions import PERMISSION_LABELS, ROLE_PERMISSIONS, require_permission
+from user_security import definir_senha, usuario_tem_senha
 
 
 def _valor_filtro(valor, padrao='Todos'):
@@ -14,17 +16,20 @@ def _valor_filtro(valor, padrao='Todos'):
 
 def render():
     with frame('Gestão de Usuários'):
-        if app.storage.user.get('cargo') not in ['Administrador', 'Coordenador']:
-            with ui.column().classes('app-card w-full items-center justify-center gap-3 py-16 text-center'):
-                ui.icon('lock', size='4rem').classes('app-muted')
-                ui.label('Acesso restrito').classes('text-2xl font-black')
-                ui.label('Esta área é reservada para administração e coordenação.').classes('app-muted text-sm')
-                ui.button('Voltar ao dashboard', icon='arrow_back', on_click=lambda: ui.navigate.to('/')).props('unelevated color=primary')
+        if not require_permission('manage_users', description='Somente administradores podem criar usuários, alterar cargos e permissões.'):
             return
 
         usuarios = load_data('usuarios.json', [])
         editing_index = {'value': -1}
         cargos = ['Administrador', 'Coordenador', 'Professor', 'Assistente']
+
+        ui.add_css('''
+            .user-security-card {
+                background: var(--app-surface-muted) !important;
+                border: 1px solid var(--app-border);
+                border-radius: 8px;
+            }
+        ''')
 
         def abrir_modal(user=None, index=-1):
             editing_index['value'] = index
@@ -32,7 +37,7 @@ def render():
                 nome_input.value = user.get('nome', '')
                 usuario_input.value = user.get('usuario') or user.get('email', '')
                 email_input.value = user.get('email', '')
-                senha_input.value = user.get('senha', '')
+                senha_input.value = ''
                 cargo_input.value = user.get('cargo', 'Professor')
                 foto_input.value = user.get('foto', '')
                 dialog_title.set_text('Editar usuário 👥')
@@ -47,8 +52,10 @@ def render():
             dialog.open()
 
         def salvar_usuario():
-            if not nome_input.value or not usuario_input.value or not senha_input.value:
-                ui.notify('Preencha nome, usuário e senha. 😊', type='warning')
+            criando = editing_index['value'] < 0
+            senha_digitada = str(senha_input.value or '')
+            if not nome_input.value or not usuario_input.value or (criando and not senha_digitada):
+                ui.notify('Preencha nome, usuário e senha para novos acessos. 😊', type='warning')
                 return
 
             usuario_acesso = usuario_input.value.strip()
@@ -62,19 +69,32 @@ def render():
                 ui.notify('Já existe um funcionário com este usuário de acesso.', type='warning')
                 return
 
+            usuario_anterior = usuarios[editing_index['value']] if editing_index['value'] >= 0 else {}
             dados = {
                 'nome': nome_input.value.strip(),
                 'usuario': usuario_acesso,
                 'email': (email_input.value or '').strip(),
-                'senha': senha_input.value,
                 'cargo': cargo_input.value,
                 'foto': (foto_input.value or '').strip(),
-                'preferencias': usuarios[editing_index['value']].get('preferencias', {}) if editing_index['value'] >= 0 else {},
+                'preferencias': usuario_anterior.get('preferencias', {}) if editing_index['value'] >= 0 else {},
                 'data_criacao': datetime.datetime.now().strftime('%d/%m/%Y'),
             }
 
+            if senha_digitada:
+                definir_senha(dados, senha_digitada)
+            elif usuario_anterior.get('senha') and not usuario_anterior.get('senha_hash'):
+                definir_senha(dados, usuario_anterior.get('senha'))
+            else:
+                for campo in ('senha_hash', 'senha', 'senha_atualizada_em'):
+                    if campo in usuario_anterior:
+                        dados[campo] = usuario_anterior[campo]
+
+            if not usuario_tem_senha(dados):
+                ui.notify('Defina uma senha para este usuário.', type='warning')
+                return
+
             if editing_index['value'] >= 0:
-                dados['data_criacao'] = usuarios[editing_index['value']].get('data_criacao', dados['data_criacao'])
+                dados['data_criacao'] = usuario_anterior.get('data_criacao', dados['data_criacao'])
                 usuarios[editing_index['value']] = dados
                 ui.notify('Usuário atualizado com sucesso! ⭐', type='positive')
             else:
@@ -106,7 +126,7 @@ def render():
             nome_input = ui.input('Nome completo *').props('outlined').classes('w-full mb-3')
             usuario_input = ui.input('Usuário de acesso *').props('outlined').classes('w-full mb-3')
             email_input = ui.input('E-mail institucional (opcional)').props('outlined').classes('w-full mb-3')
-            senha_input = ui.input('Senha *', password=True, password_toggle_button=True).props('outlined').classes('w-full mb-3')
+            senha_input = ui.input('Senha / nova senha', password=True, password_toggle_button=True).props('outlined').classes('w-full mb-3')
             cargo_input = ui.select(cargos, label='Cargo *').props('outlined').classes('w-full mb-4')
             foto_input = ui.input('URL da foto (opcional)').props('outlined').classes('w-full mb-4')
             with ui.row().classes('w-full justify-end gap-2 mt-4'):
@@ -120,6 +140,20 @@ def render():
                     ui.label('Pessoas que cuidam da rotina').classes('text-3xl font-black')
                     ui.label('Organize acessos de professores, coordenação e administração.').classes('app-muted text-sm')
                 ui.button('Novo usuário ✨', icon='person_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+
+            with ui.card().classes('app-card w-full p-5'):
+                ui.label('🔐 Regras de acesso por cargo').classes('text-xl font-black mb-1')
+                ui.label('Use o menor nível de acesso possível para proteger dados de alunos e famílias.').classes('app-muted text-sm mb-4')
+                with ui.grid(columns=1).classes('w-full gap-3 lg:grid-cols-4'):
+                    for cargo_nome in cargos:
+                        permissoes = ROLE_PERMISSIONS.get(cargo_nome, set())
+                        with ui.column().classes('user-security-card w-full gap-2 p-4'):
+                            ui.label(cargo_nome).classes('font-black')
+                            ui.label(f'{len(permissoes)} permissões').classes('app-muted text-xs font-bold uppercase')
+                            with ui.row().classes('gap-1 flex-wrap'):
+                                for permissao, label in PERMISSION_LABELS.items():
+                                    if permissao in permissoes:
+                                        ui.label(label).classes('app-pill text-[10px] font-bold px-2 py-1')
 
             with ui.row().classes('app-toolbar w-full justify-between items-center gap-4 p-4'):
                 with ui.row().classes('flex-1 items-center gap-3 flex-wrap'):

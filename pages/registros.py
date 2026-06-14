@@ -4,6 +4,7 @@ from nicegui import app, ui
 
 from database import load_data, save_data
 from layout import frame
+from permissions import has_permission, require_permission
 
 
 def _texto(valor, padrao='Não informado'):
@@ -36,9 +37,13 @@ def _classe_intensidade(valor):
 
 def render():
     with frame('Registros de Acompanhamento'):
+        if not require_permission('view_registros'):
+            return
+
         registros = load_data('registros.json', [])
         alunos = load_data('alunos.json', [])
         editing_index = {'value': -1}
+        pode_gerir = has_permission('manage_registros')
 
         tipos = [
             'Observação',
@@ -195,6 +200,9 @@ def render():
             return filtrados
 
         def abrir_modal(registro=None, index=-1):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite alterar registros.', type='warning')
+                return
             editing_index['value'] = index
             aluno_atual = registro.get('aluno', '') if registro else ''
 
@@ -212,6 +220,9 @@ def render():
             dialog.open()
 
         def salvar_registro():
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite salvar registros.', type='warning')
+                return
             aluno_selecionado = _valor_filtro(aluno_input.value, '')
             tipo_selecionado = _valor_filtro(tipo_input.value, tipos[0])
             intensidade_selecionada = _valor_filtro(intensidade_input.value, 'Neutro')
@@ -244,6 +255,9 @@ def render():
             atualizar_lista()
 
         def confirmar_exclusao(registro):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite excluir registros.', type='warning')
+                return
             with ui.dialog() as confirm_dialog, ui.card().classes('app-card w-full max-w-md p-6'):
                 ui.label('Excluir registro').classes('text-xl font-black text-red-600 mb-3')
                 ui.label(f'Deseja apagar o registro de "{registro.get("aluno", "aluno")}"?').classes('app-muted text-sm')
@@ -287,7 +301,8 @@ def render():
                     ui.label('📝 Diário de acompanhamento').classes('app-muted text-sm font-black uppercase')
                     ui.label('Registros importantes da rotina').classes('text-3xl font-black leading-tight')
                     ui.label('Acompanhe evolução, sinais de sobrecarga, estratégias aplicadas e combinados com a família.').classes('app-muted text-sm')
-                ui.button('Novo registro', icon='note_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                if pode_gerir:
+                    ui.button('Novo registro', icon='note_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
             with ui.row().classes('app-toolbar w-full items-center justify-between gap-4 p-4'):
                 with ui.row().classes('flex-1 items-center gap-3 flex-wrap'):
@@ -317,7 +332,8 @@ def render():
                         ui.label('📝').classes('text-5xl')
                         ui.label('Nenhum registro encontrado').classes('text-xl font-black')
                         ui.label('Ajuste os filtros ou crie um novo acompanhamento.').classes('app-muted text-sm')
-                        ui.button('Novo registro', icon='note_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                        if pode_gerir:
+                            ui.button('Novo registro', icon='note_add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
                     return
 
                 grupos = {}
@@ -369,9 +385,10 @@ def render():
                                                         ui.label(registro.get('tipo', 'Registro')).classes('app-pill text-xs font-black px-3 py-1')
                                                         ui.label(intensidade).classes('app-pill text-xs font-black px-3 py-1')
                                                     ui.label(f"Registrado por {registro.get('autor', 'Equipe')}").classes('app-muted text-xs font-bold')
-                                                with ui.row().classes('gap-1 shrink-0'):
-                                                    ui.button(icon='edit', on_click=lambda i=index, r=registro: abrir_modal(r, i)).props('flat color=primary round size=sm').tooltip('Editar')
-                                                    ui.button(icon='delete', on_click=lambda r=registro: confirmar_exclusao(r)).props('flat color=red round size=sm').tooltip('Excluir')
+                                                if pode_gerir:
+                                                    with ui.row().classes('gap-1 shrink-0'):
+                                                        ui.button(icon='edit', on_click=lambda i=index, r=registro: abrir_modal(r, i)).props('flat color=primary round size=sm').tooltip('Editar')
+                                                        ui.button(icon='delete', on_click=lambda r=registro: confirmar_exclusao(r)).props('flat color=red round size=sm').tooltip('Excluir')
 
                                             ui.label(_texto(registro.get('descricao'), 'Sem descrição')).classes('app-muted text-sm leading-relaxed')
 

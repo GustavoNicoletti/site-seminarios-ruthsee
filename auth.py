@@ -2,14 +2,14 @@ import os
 import sys
 
 
-DEFAULT_ADMIN_EMAIL = 'gustavo'
+DEFAULT_ADMIN_USER = 'gustavo'
 DEFAULT_ADMIN_PASSWORD = '123'
 
 
 def get_admin_credentials() -> tuple[str, str]:
-    email = os.getenv('ADAPTAESCOLA_ADMIN_EMAIL', DEFAULT_ADMIN_EMAIL)
+    usuario = os.getenv('ADAPTAESCOLA_ADMIN_USER') or os.getenv('ADAPTAESCOLA_ADMIN_EMAIL') or DEFAULT_ADMIN_USER
     password = os.getenv('ADAPTAESCOLA_ADMIN_PASSWORD', DEFAULT_ADMIN_PASSWORD)
-    return email, password
+    return usuario, password
 
 
 def get_storage_secret() -> str:

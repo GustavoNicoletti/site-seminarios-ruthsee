@@ -4,6 +4,7 @@ from nicegui import app, ui
 
 from database import load_data, save_data
 from layout import frame
+from permissions import has_permission, require_permission
 
 
 def _texto(valor, padrao='Não informado'):
@@ -54,10 +55,14 @@ def _campo_data(label, value='', dense=False):
 
 def render():
     with frame('Agenda / Rotina do Dia'):
+        if not require_permission('view_agenda'):
+            return
+
         agenda = load_data('agenda.json', [])
         alunos = load_data('alunos.json', [])
         turmas = load_data('turmas.json', [])
         editing_index = {'value': -1}
+        pode_gerir = has_permission('manage_agenda')
 
         tipos = [
             'Entrada',
@@ -208,6 +213,9 @@ def render():
                 filtro.update()
 
         def abrir_modal(item=None, index=-1):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite alterar a agenda.', type='warning')
+                return
             editing_index['value'] = index
             data_input.value = item.get('data', data_filter.value or _hoje()) if item else (data_filter.value or _hoje())
             inicio_input.value = item.get('hora_inicio', '') if item else ''
@@ -224,6 +232,9 @@ def render():
             dialog.open()
 
         def salvar_item():
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite salvar atividades na agenda.', type='warning')
+                return
             if not titulo_input.value or not data_input.value or not inicio_input.value:
                 ui.notify('Informe data, horário inicial e título da atividade.', type='warning')
                 return
@@ -256,6 +267,9 @@ def render():
             atualizar_lista()
 
         def confirmar_exclusao(item):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite excluir atividades da agenda.', type='warning')
+                return
             with ui.dialog() as confirm_dialog, ui.card().classes('app-card w-full max-w-md p-6'):
                 ui.label('Remover atividade').classes('text-xl font-black text-red-600 mb-3')
                 ui.label(f'Deseja remover "{item.get("titulo", "atividade")}" da rotina?').classes('app-muted text-sm')
@@ -316,7 +330,8 @@ def render():
                     ui.label('🗓️ Rotina visual da escola').classes('app-muted text-sm font-black uppercase')
                     ui.label('Agenda / Rotina do dia').classes('text-3xl font-black leading-tight')
                     ui.label('Organize horários, transições, apoios visuais e responsáveis para uma rotina previsível.').classes('app-muted text-sm')
-                ui.button('Nova atividade', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                if pode_gerir:
+                    ui.button('Nova atividade', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
             with ui.row().classes('app-toolbar w-full items-center justify-between gap-4 p-4'):
                 with ui.row().classes('flex-1 items-center gap-3 flex-wrap'):
@@ -342,14 +357,16 @@ def render():
                     with ui.column().classes('gap-0'):
                         ui.label(f'Rotina de {data_filter.value or _hoje()}').classes('text-xl font-black')
                         ui.label(f'{len(filtrados)} atividade(s) encontrada(s)').classes('app-muted text-sm')
-                    ui.button('Adicionar atividade', icon='add', on_click=lambda: abrir_modal()).props('flat color=primary no-caps')
+                    if pode_gerir:
+                        ui.button('Adicionar atividade', icon='add', on_click=lambda: abrir_modal()).props('flat color=primary no-caps')
 
                 if not filtrados:
                     with ui.column().classes('app-card w-full items-center justify-center gap-3 py-16 text-center'):
                         ui.label('🗓️').classes('text-5xl')
                         ui.label('Nenhuma atividade nesta rotina').classes('text-xl font-black')
                         ui.label('Cadastre horários para criar uma rotina visual clara para a equipe.').classes('app-muted text-sm')
-                        ui.button('Nova atividade', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                        if pode_gerir:
+                            ui.button('Nova atividade', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
                     return
 
                 with ui.card().classes('app-card w-full p-5'):
@@ -373,9 +390,10 @@ def render():
                                                 ui.label(status).classes(f'agenda-status {status_class}')
                                             ui.label(_texto(item.get('titulo'), 'Atividade')).classes('text-xl font-black leading-tight')
                                             ui.label(f"{_texto(item.get('turma'), 'Geral')} · {_texto(item.get('aluno'), 'Geral')}").classes('app-muted text-xs font-bold')
-                                        with ui.row().classes('gap-1 shrink-0'):
-                                            ui.button(icon='edit', on_click=lambda i=index, a=item: abrir_modal(a, i)).props('flat color=primary round size=sm').tooltip('Editar')
-                                            ui.button(icon='delete', on_click=lambda a=item: confirmar_exclusao(a)).props('flat color=red round size=sm').tooltip('Remover')
+                                        if pode_gerir:
+                                            with ui.row().classes('gap-1 shrink-0'):
+                                                ui.button(icon='edit', on_click=lambda i=index, a=item: abrir_modal(a, i)).props('flat color=primary round size=sm').tooltip('Editar')
+                                                ui.button(icon='delete', on_click=lambda a=item: confirmar_exclusao(a)).props('flat color=red round size=sm').tooltip('Remover')
 
                                     with ui.grid(columns=1).classes('w-full gap-3 md:grid-cols-2 mt-3'):
                                         with ui.column().classes('agenda-note gap-1 p-3'):

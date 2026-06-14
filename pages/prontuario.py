@@ -3,8 +3,10 @@ from urllib.parse import quote
 
 from nicegui import ui
 
-from database import load_data
+from database import load_data, save_data
 from layout import frame
+from permissions import require_permission
+from student_links import garantir_ids_alunos, item_vinculado_ao_aluno
 
 
 def _texto(valor, padrao='Não informado'):
@@ -94,7 +96,13 @@ def _estrategias_sugeridas(aluno, estrategias):
 
 def render(aluno_index):
     with frame('Prontuário do Aluno'):
+        if not require_permission('view_alunos'):
+            return
+
         alunos = load_data('alunos.json', [])
+        if garantir_ids_alunos(alunos):
+            save_data('alunos.json', alunos)
+
         responsaveis = load_data('pais.json', [])
         registros = load_data('registros.json', [])
         estrategias = load_data('estrategias.json', [])
@@ -124,7 +132,7 @@ def render(aluno_index):
 
         responsaveis_aluno = [
             item for item in responsaveis
-            if _normalizar(item.get('aluno')) == _normalizar(nome)
+            if item_vinculado_ao_aluno(item, aluno)
         ]
         estrategias_aluno = _estrategias_sugeridas(aluno, estrategias)
         registros_aluno = [

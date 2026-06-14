@@ -2,6 +2,7 @@ from nicegui import ui
 
 from database import load_data, save_data
 from layout import frame
+from permissions import has_permission, require_permission
 
 
 def _texto(valor, padrao='Não informado'):
@@ -21,10 +22,14 @@ def _valor_filtro(valor, padrao='Todos'):
 
 def render():
     with frame('Turmas'):
+        if not require_permission('view_turmas'):
+            return
+
         turmas = load_data('turmas.json', [])
         alunos = load_data('alunos.json', [])
         editing_index = {'value': -1}
         nome_anterior = {'value': ''}
+        pode_gerir = has_permission('manage_turmas')
 
         periodos = ['Manhã', 'Tarde', 'Integral', 'Noite']
 
@@ -101,6 +106,9 @@ def render():
             return filtradas
 
         def abrir_modal(turma=None, index=-1, nome_predefinido=''):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite alterar turmas.', type='warning')
+                return
             editing_index['value'] = index
             nome_atual = turma.get('nome', nome_predefinido) if turma else nome_predefinido
             nome_anterior['value'] = nome_atual
@@ -117,6 +125,9 @@ def render():
             dialog.open()
 
         def salvar_turma():
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite salvar turmas.', type='warning')
+                return
             nome = (nome_input.value or '').strip()
             if not nome:
                 ui.notify('Informe o nome da turma.', type='warning')
@@ -154,6 +165,9 @@ def render():
             atualizar_lista()
 
         def confirmar_exclusao(turma):
+            if not pode_gerir:
+                ui.notify('Seu cargo não permite remover turmas.', type='warning')
+                return
             alunos_vinculados = len(alunos_da_turma(turma.get('nome')))
             with ui.dialog() as confirm_dialog, ui.card().classes('app-card w-full max-w-md p-6'):
                 ui.label('Remover dados da turma').classes('text-xl font-black text-red-600 mb-3')
@@ -199,7 +213,8 @@ def render():
                     ui.label('🏷️ Organização por turma').classes('app-muted text-sm font-black uppercase')
                     ui.label('Turmas da Ruth See').classes('text-3xl font-black leading-tight')
                     ui.label('Acompanhe professor, período, sala e alunos vinculados a cada turma.').classes('app-muted text-sm')
-                ui.button('Nova turma', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                if pode_gerir:
+                    ui.button('Nova turma', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
             with ui.row().classes('app-toolbar w-full items-center justify-between gap-4 p-4'):
                 with ui.row().classes('flex-1 items-center gap-3 flex-wrap'):
@@ -233,9 +248,10 @@ def render():
                                     ui.label(f'🕒 {periodo}').classes('app-pill text-xs font-black px-3 py-1')
                                     ui.label(f'☀️ {len(alunos_turma)} aluno(s)').classes('app-pill text-xs font-black px-3 py-1')
                             with ui.row().classes('gap-1 shrink-0'):
-                                ui.button(icon='edit', on_click=lambda t=turma, i=index, n=nome: abrir_modal(t, i, n)).props('flat color=primary round size=sm').tooltip('Editar turma')
-                                if tem_cadastro:
-                                    ui.button(icon='delete', on_click=lambda t=turma: confirmar_exclusao(t)).props('flat color=red round size=sm').tooltip('Remover dados da turma')
+                                if pode_gerir:
+                                    ui.button(icon='edit', on_click=lambda t=turma, i=index, n=nome: abrir_modal(t, i, n)).props('flat color=primary round size=sm').tooltip('Editar turma')
+                                    if tem_cadastro:
+                                        ui.button(icon='delete', on_click=lambda t=turma: confirmar_exclusao(t)).props('flat color=red round size=sm').tooltip('Remover dados da turma')
 
                         with ui.column().classes('w-full gap-3 flex-grow'):
                             with ui.column().classes('class-line gap-1 p-3'):
@@ -270,7 +286,8 @@ def render():
                         ui.label('🏷️').classes('text-5xl')
                         ui.label('Nenhuma turma encontrada').classes('text-xl font-black')
                         ui.label('Cadastre uma turma ou ajuste os filtros de busca.').classes('app-muted text-sm')
-                        ui.button('Nova turma', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
+                        if pode_gerir:
+                            ui.button('Nova turma', icon='add', on_click=lambda: abrir_modal()).props('unelevated color=primary')
 
         pesquisa_input.on_value_change(lambda _: atualizar_lista())
         periodo_filter.on_value_change(lambda _: atualizar_lista())

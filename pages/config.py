@@ -2,6 +2,7 @@ from nicegui import app, ui
 
 from database import load_data, save_data
 from layout import frame
+from permissions import has_permission, require_permission
 
 
 PAGINAS_INICIAIS = {
@@ -14,6 +15,18 @@ PAGINAS_INICIAIS = {
     'Relatórios': '/relatorios',
     'Impressão/PDF': '/impressao',
     'Estratégias': '/estrategias',
+}
+
+PAGINA_PERMISSAO = {
+    '/': 'view_dashboard',
+    '/agenda': 'view_agenda',
+    '/alunos': 'view_alunos',
+    '/turmas': 'view_turmas',
+    '/pais': 'view_pais',
+    '/registros': 'view_registros',
+    '/relatorios': 'view_relatorios',
+    '/impressao': 'view_impressao',
+    '/estrategias': 'view_estrategias',
 }
 
 
@@ -37,6 +50,14 @@ def _pagina_label(rota):
         if pagina == rota:
             return label
     return 'Dashboard'
+
+
+def _paginas_permitidas():
+    return {
+        label: rota
+        for label, rota in PAGINAS_INICIAIS.items()
+        if has_permission(PAGINA_PERMISSAO.get(rota, 'view_dashboard'))
+    }
 
 
 def _salvar_usuario_logado(perfil, preferencias):
@@ -77,9 +98,13 @@ def _salvar_usuario_logado(perfil, preferencias):
 
 def render():
     with frame('Configurações'):
+        if not require_permission('view_config'):
+            return
+
         config = load_data('config.json', {'nome': 'Professor(a)', 'foto': '', 'cargo': 'Professor', 'bio': '', 'modo_escuro': False})
         user = app.storage.user
         preferencias = _preferencias_usuario(user, config)
+        paginas_permitidas = _paginas_permitidas()
 
         perfil = {
             'nome': user.get('nome') or config.get('nome', 'Professor(a)'),
@@ -183,8 +208,8 @@ def render():
                             ui.icon('home', size='sm').classes('tone-teal')
                             ui.label('Página inicial').classes('font-black')
                         pagina_input = ui.select(
-                            list(PAGINAS_INICIAIS.keys()),
-                            value=_pagina_label(preferencias.get('pagina_inicial', '/')),
+                            list(paginas_permitidas.keys()),
+                            value=_pagina_label(preferencias.get('pagina_inicial', '/')) if _pagina_label(preferencias.get('pagina_inicial', '/')) in paginas_permitidas else 'Dashboard',
                             label='Abrir após o login',
                         ).props('outlined dense').classes('w-full')
                         ui.label('Você pode entrar direto na área que mais usa no dia a dia.').classes('app-muted text-xs leading-relaxed')
@@ -200,12 +225,12 @@ def render():
                         with ui.row().classes('items-center gap-3'):
                             ui.icon('security', size='sm').classes('tone-green')
                             ui.label('Dados locais').classes('font-black')
-                        ui.label('O sistema continua simples para uma escola pequena: os dados ficam em arquivos JSON dentro do projeto.').classes('app-muted text-sm leading-relaxed')
+                        ui.label('O sistema continua simples para uma escola pequena: os dados ficam em um banco SQLite local dentro da pasta data.').classes('app-muted text-sm leading-relaxed')
 
                 def salvar_configuracoes():
                     novas_preferencias = {
                         'modo_escuro': tema_input.value == 'Escuro',
-                        'pagina_inicial': PAGINAS_INICIAIS.get(pagina_input.value, '/'),
+                        'pagina_inicial': paginas_permitidas.get(pagina_input.value, '/'),
                         'nome_completo_topo': bool(nome_completo_input.value),
                     }
                     _salvar_usuario_logado(perfil, novas_preferencias)

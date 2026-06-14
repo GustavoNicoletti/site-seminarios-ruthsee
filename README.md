@@ -54,17 +54,17 @@ Fora da mesma rede, `localhost` e o IP local não funcionam. Para acessar com se
 
 Por padrão, o administrador local é:
 
-- E-mail: `admin@adaptaescola.com`
-- Senha: `admin123`
+- Usuário: `gustavo`
+- Senha: `123`
 
 Para trocar sem editar código, configure as variáveis de ambiente:
 
 ```powershell
-$env:ADAPTAESCOLA_ADMIN_EMAIL = 'seu-email@exemplo.com'
+$env:ADAPTAESCOLA_ADMIN_USER = 'seu-usuario'
 $env:ADAPTAESCOLA_ADMIN_PASSWORD = 'uma-senha-forte'
 $env:ADAPTAESCOLA_STORAGE_SECRET = 'um-segredo-longo-e-aleatorio'
 python main.py
 ```
 
-Os dados da aplicação ficam em arquivos JSON dentro da pasta `data/`.
+Os dados da aplicação ficam no banco SQLite local `data/ruthsee.db`. Os arquivos JSON antigos da pasta `data/` são usados como base para a primeira migração quando o banco ainda não existe.
 
